@@ -1,11 +1,18 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from routes import api_router
 
 # Create FastAPI instance
 app = FastAPI(
     title="Nene API",
     description="A simple FastAPI service",
     version="1.0.0"
+)
+
+app.include_router(
+    api_router,
+    prefix="",
+    tags=["core"]
 )
 
 # Add CORS middleware

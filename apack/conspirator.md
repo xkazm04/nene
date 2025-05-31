@@ -1,0 +1,20 @@
+Let’s analyze Donald Trump's claim, 
+- chybí source of opinion - logic if not source. Proč říká, to co říká 
+# Claim - possible format of the structure
+"The crime rate in the U.S. is the highest it’s been in 47 years." 
+
+1. **Identify emotional manipulation techniques**: This statement is crafted to provoke fear, concern, and urgency. Words like "highest" and "47 years" are emotionally charged and suggest an alarming situation. This tactic is called **fearmongering**, designed to sway public opinion by evoking anxiety rather than rational analysis. 
+
+2. **Find what's NOT being said (lies by omission)**: The statement does not specify what is meant by "crime rate"—whether it refers to total crime, violent crime, property crime, or some other category. Each of these subcategories could show different trends. By failing to define the term, Trump omits crucial context that could shift the interpretation significantly. This omission creates room for misunderstanding or deliberate misrepresentation. 
+
+3. **Detect cherry-picked data or timeframes**: The claim states "47 years" without citing specific years, datasets, or sources. It selectively emphasizes a long timeframe that might exaggerate the scope of the problem while ignoring recent downward trends (if applicable). In many cases, U.S. crime rates, particularly violent crime, have declined since their peaks in the 1990s. Without more context, this could constitute cherry-picking a period to inflate perceptions of an increase. 
+
+4. **Uncover potential conflicts of interest**: Trump likely benefits politically from amplifying fears about crime because it aligns with his "law and order" platform. Such statements serve to justify hardline policies or mobilize his voter base. There's a clear **self-serving agenda** at play here. 
+
+5. **Analyze who benefits from this narrative**: This narrative benefits Trump and others advocating for stricter policing, tougher criminal justice policies, or political gains tied to portraying America as being in a dire state. It may also harm opponents who are depicted as being “soft on crime.” 
+
+6. **Look for gaslighting or misdirection tactics**: This could qualify as **misdirection**, as it potentially shifts focus away from other issues (e.g., economic inequalities, systemic challenges, or social policies) and instead places sole blame on a purported spike in criminality. Additionally, if the statement is inaccurate, it could serve as an attempt to **gaslight** individuals into believing the crime problem is far worse than it is. 
+
+7. **Question the timing of statements**: The timing could be strategically aligned with an election cycle or a particular event where stirring fear of crime would consolidate political support. It’s important to consider whether this claim coincided with specific campaign efforts or a key policy announcement. 
+
+8. **Identify strawman arguments or false dichotomies**: There’s no explicit strawman argument here, but the implication that crime is out of control could be a precursor to presenting a false dichotomy—for example, "Vote for me, or the crime rate will continue to spiral." This oversimplifies the complex factors influencing crime trends. --- ### Verdict: The claim is **manipulative** and likely **misleading**. - According to FBI and Bureau of Justice Statistics (BJS) data, overall crime rates in the U.S. have been on a long-term decline since the early 1990s. While certain types of violent crime (e.g., homicides) spiked in recent years during crises like the COVID-19 pandemic, the overall crime rate (which includes property crime) has not returned to 1990s levels. This directly contradicts the idea of the "highest in 47 years." - By failing to provide evidence or context, this statement risks being a **half-truth** or outright **false**. Without citing specific data to corroborate the claim, it appears to use **emotional manipulation (fearmongering)**, **cherry-picking**, and a **lie by omission** to exaggerate the state of crime in the U.S.
