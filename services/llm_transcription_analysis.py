@@ -1,6 +1,6 @@
 import os
 import logging
-from typing import List, Optional
+from typing import List
 from dotenv import load_dotenv
 from openai import OpenAI
 from pydantic import BaseModel

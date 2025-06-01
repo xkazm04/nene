@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from pydantic import BaseModel
 import json
+import google.generativeai as genai
+from prompts.fc_prompt import factcheck_prompt
 
 # Load environment variables
 load_dotenv()
@@ -26,36 +28,73 @@ class ExpertOpinion(BaseModel):
     psychic: Optional[str] = None
 
 
+class ResourceReference(BaseModel):
+    url: str
+    title: str
+    category: Literal["mainstream", "governance", "academic", "medical", "other"]
+    country: str
+    credibility: Literal["high", "medium", "low"]
+
+
+class ResourceAnalysis(BaseModel):
+    total: str  # e.g., "85%"
+    count: int
+    mainstream: int = 0
+    governance: int = 0
+    academic: int = 0
+    medical: int = 0
+    other: int = 0
+    major_countries: List[str] = []
+    references: List[ResourceReference] = []
+
+
 class LLMResearchResponse(BaseModel):
     valid_sources: str  # e.g., "15 (85% agreement across 23 unique sources)"
     verdict: str
-    status: Literal["TRUE", "FALSE", "MISLEADING", "PARTIALLY_TRUE", "UNVERIFIABLE"]
-    correction: Optional[str] = None  # Corrected statement if original is false/misleading
-    resources: List[str]
+    status: Literal["TRUE", "FALSE", "MISLEADING",
+                    "PARTIALLY_TRUE", "UNVERIFIABLE"]
+    # Corrected statement if original is false/misleading
+    correction: Optional[str] = None
+    resources_agreed: ResourceAnalysis
+    resources_disagreed: ResourceAnalysis
     experts: ExpertOpinion
+    research_method: str  # Track which service was used
 
 
-class LLMResearchService:
+class LlmResearchService:
     def __init__(self):
-        """Initialize OpenAI client for LLM-based research."""
-        self.api_key = os.getenv("OPENAI_API_KEY")
+        """Initialize both LLM and Gemini clients for comprehensive research."""
+        # Initialize LLM (primary)
         self.groq_api_key = os.getenv("GROQ_API_KEY")
-        groq_client = OpenAI(api_key=self.groq_api_key,
-                             base_url="https://api.groq.com/openai/v1")
-        openai_client = OpenAI(api_key=self.api_key)
-        self.api_key = os.getenv("OPENAI_API_KEY")
-        if not self.api_key:
-            raise ValueError(
-                "OPENAI_API_KEY not found in environment variables")
+        if not self.groq_api_key:
+            raise ValueError("GROQ_API_KEY not found in environment variables")
 
-        self.client = groq_client
-        # self.model = "gpt-4.1-mini"  
-        self.model = "meta-llama/llama-4-scout-17b-16e-instruct"
-        logger.info("LLM Research service initialized successfully")
+        self.llm_client = OpenAI(
+            api_key=self.groq_api_key,
+            base_url="https://api.groq.com/openai/v1"
+        )
+        self.llm_model = "meta-llama/llama-4-scout-17b-16e-instruct"
+
+        # Initialize Gemini (fallback)
+        try:
+            self.google_api_key = os.environ['GOOGLE_API_KEY']
+            genai.configure(api_key=self.google_api_key)
+            self.gemini_model = genai.GenerativeModel(
+                'gemini-1.5-flash-latest')
+            logger.info("Gemini fallback service initialized successfully")
+        except KeyError:
+            logger.warning(
+                "GOOGLE_API_KEY not found - Gemini fallback unavailable")
+            self.gemini_model = None
+        except Exception as e:
+            logger.warning(f"Could not initialize Gemini: {e}")
+            self.gemini_model = None
+
+        logger.info("Combined Research service initialized successfully")
 
     def research_statement(self, request: LLMResearchRequest) -> LLMResearchResponse:
         """
-        Research a statement using LLM's trained knowledge base.
+        Research a statement using LLM first, fallback to Gemini if UNVERIFIABLE.
 
         Args:
             request: Research request with statement, source, and context
@@ -64,124 +103,198 @@ class LLMResearchService:
             LLMResearchResponse: Fact-check result with verdict and resources
 
         Raises:
-            Exception: If research fails
+            Exception: If both research methods fail
         """
         try:
             logger.info(
-                f"Starting LLM research for statement: {request.statement[:100]}...")
-            logger.info(f"Statement source: {request.source}")
-            logger.info(f"Context: {request.context}")
+                f"Starting research for statement: {request.statement[:100]}...")
 
-            # Construct the research prompt
-            system_prompt = self._get_system_prompt()
-            user_prompt = self._get_user_prompt(request)
-
-            logger.debug("Sending research request to OpenAI API")
-
-            # Call OpenAI API
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.1,  # Low temperature for consistent fact-checking
-                max_tokens=2500,  # Increased for expanded response
-                response_format={"type": "json_object"}
-            )
-
-            logger.info("Successfully received response from OpenAI API")
-
-            # Parse the response
-            response_content = response.choices[0].message.content
-            logger.debug(f"Raw response: {response_content[:200]}...")
-
+            # Try LLM first (primary method)
             try:
-                parsed_response = json.loads(response_content)
-                logger.info("Successfully parsed JSON response")
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse JSON response: {e}")
-                raise Exception(f"Invalid JSON response from OpenAI: {e}")
+                llm_result = self._research_with_llm(request)
 
-            # Extract expert opinions
-            experts_data = parsed_response.get("experts", {})
-            experts = ExpertOpinion(
-                critic=experts_data.get("critic"),
-                devil=experts_data.get("devil"),
-                nerd=experts_data.get("nerd"),
-                psychic=experts_data.get("psychic")
-            )
+                # If LLM gives definitive answer, return it
+                if llm_result.status != "UNVERIFIABLE":
+                    llm_result.research_method = "LLM (Primary)"
+                    logger.info(
+                        f"LLM research successful with status: {llm_result.status}")
+                    return llm_result
 
-            # Create structured response
-            result = LLMResearchResponse(
-                valid_sources=parsed_response.get("valid_sources", "Unknown"),
-                verdict=parsed_response.get("verdict", "Unable to determine verdict"),
-                status=parsed_response.get("status", "UNVERIFIABLE"),
-                correction=parsed_response.get("correction"),
-                resources=parsed_response.get("resources", []),
-                experts=experts
-            )
+                logger.info(
+                    "LLM returned UNVERIFIABLE, attempting Gemini fallback...")
 
-            logger.info(f"Research completed successfully")
-            logger.info(f"Status: {result.status}")
-            logger.info(f"Valid sources: {result.valid_sources}")
-            logger.info(f"Verdict: {result.verdict[:100]}...")
-            logger.info(f"Expert perspectives included: {len([x for x in [experts.critic, experts.devil, experts.nerd, experts.psychic] if x])}")
+            except Exception as e:
+                logger.warning(
+                    f"LLM research failed: {e}, attempting Gemini fallback...")
 
-            return result
+            # Fallback to Gemini if LLM is unverifiable or fails
+            if self.gemini_model:
+                try:
+                    gemini_result = self._research_with_gemini(request)
+                    gemini_result.research_method = "Gemini (Fallback - Internet Search)"
+                    logger.info(
+                        f"Gemini research successful with status: {gemini_result.status}")
+                    return gemini_result
+
+                except Exception as e:
+                    logger.error(f"Gemini research also failed: {e}")
+            else:
+                logger.error("Gemini fallback not available")
+
+            # If both fail, return the LLM result (even if UNVERIFIABLE) or create error response
+            if 'llm_result' in locals():
+                llm_result.research_method = "LLM (Primary - Fallback Failed)"
+                return llm_result
+            else:
+                # Create error response if both services failed
+                return self._create_error_response(request)
 
         except Exception as e:
-            error_msg = f"Failed to research statement with LLM: {str(e)}"
+            error_msg = f"Complete research failure: {str(e)}"
             logger.error(error_msg)
-            logger.error(f"Error type: {type(e).__name__}")
             raise Exception(error_msg)
+
+    def _research_with_llm(self, request: LLMResearchRequest) -> LLMResearchResponse:
+        """Research using LLM (training data based)."""
+        logger.debug("Starting LLM research")
+
+        # Construct the research prompt
+        system_prompt = self._get_system_prompt()
+        user_prompt = self._get_user_prompt(request)
+
+        # Call LLM API
+        response = self.llm_client.chat.completions.create(
+            model=self.llm_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.1,
+            max_tokens=2500,
+            response_format={"type": "json_object"}
+        )
+
+        # Parse the response
+        response_content = response.choices[0].message.content
+        try:
+            parsed_response = json.loads(response_content)
+        except json.JSONDecodeError as e:
+            raise Exception(f"Invalid JSON response from LLM: {e}")
+
+        return self._create_response_object(parsed_response)
+
+    def _research_with_gemini(self, request: LLMResearchRequest) -> LLMResearchResponse:
+        """Research using Gemini with internet search capabilities."""
+        logger.debug("Starting Gemini research")
+
+        # Enhanced Gemini prompt with internet search capabilities
+        gemini_prompt = f"""You are a professional fact-checker with access to current internet information and extensive knowledge across multiple domains.
+                        Your task is to fact-check the following statement using both your knowledge base AND current internet search capabilities to find the most up-to-date information:
+
+                        STATEMENT: "{request.statement}"
+                        SOURCE: {request.source}
+                        CONTEXT: {request.context}
+
+                        """ + factcheck_prompt
+
+        # Generate content with Gemini
+        response = self.gemini_model.generate_content(gemini_prompt)
+
+        if not response or not response.text:
+            raise Exception("Empty response from Gemini")
+
+        # Try to extract JSON from response
+        response_text = response.text.strip()
+
+        # Find JSON object in response
+        start_idx = response_text.find('{')
+        end_idx = response_text.rfind('}') + 1
+
+        if start_idx == -1 or end_idx == 0:
+            raise Exception("No JSON object found in Gemini response")
+
+        json_str = response_text[start_idx:end_idx]
+
+        try:
+            parsed_response = json.loads(json_str)
+        except json.JSONDecodeError as e:
+            raise Exception(f"Invalid JSON response from Gemini: {e}")
+
+        return self._create_response_object(parsed_response)
+
+    def _create_response_object(self, parsed_response: dict) -> LLMResearchResponse:
+        """Create standardized response object from parsed JSON."""
+        # Extract expert opinions
+        experts_data = parsed_response.get("experts", {})
+        experts = ExpertOpinion(
+            critic=experts_data.get("critic"),
+            devil=experts_data.get("devil"),
+            nerd=experts_data.get("nerd"),
+            psychic=experts_data.get("psychic")
+        )
+
+        # Extract resource analysis for agreed sources
+        agreed_data = parsed_response.get("resources_agreed", {})
+        resources_agreed = ResourceAnalysis(
+            total=agreed_data.get("total", "0%"),
+            count=agreed_data.get("count", 0),
+            mainstream=agreed_data.get("mainstream", 0),
+            governance=agreed_data.get("governance", 0),
+            academic=agreed_data.get("academic", 0),
+            medical=agreed_data.get("medical", 0),
+            other=agreed_data.get("other", 0),
+            major_countries=agreed_data.get("major_countries", []),
+            references=[
+                ResourceReference(**ref) for ref in agreed_data.get("references", [])
+            ]
+        )
+
+        # Extract resource analysis for disagreed sources
+        disagreed_data = parsed_response.get("resources_disagreed", {})
+        resources_disagreed = ResourceAnalysis(
+            total=disagreed_data.get("total", "0%"),
+            count=disagreed_data.get("count", 0),
+            mainstream=disagreed_data.get("mainstream", 0),
+            governance=disagreed_data.get("governance", 0),
+            academic=disagreed_data.get("academic", 0),
+            medical=disagreed_data.get("medical", 0),
+            other=disagreed_data.get("other", 0),
+            major_countries=disagreed_data.get("major_countries", []),
+            references=[
+                ResourceReference(**ref) for ref in disagreed_data.get("references", [])
+            ]
+        )
+
+        # Create structured response
+        return LLMResearchResponse(
+            valid_sources=parsed_response.get("valid_sources", "Unknown"),
+            verdict=parsed_response.get(
+                "verdict", "Unable to determine verdict"),
+            status=parsed_response.get("status", "UNVERIFIABLE"),
+            correction=parsed_response.get("correction"),
+            resources_agreed=resources_agreed,
+            resources_disagreed=resources_disagreed,
+            experts=experts,
+            research_method=""  # Will be set by calling method
+        )
+
+    def _create_error_response(self, request: LLMResearchRequest) -> LLMResearchResponse:
+        """Create error response when both services fail."""
+        return LLMResearchResponse(
+            valid_sources="0 (Service Error)",
+            verdict="Unable to fact-check due to service errors",
+            status="UNVERIFIABLE",
+            correction=None,
+            resources_agreed=ResourceAnalysis(),
+            resources_disagreed=ResourceAnalysis(),
+            experts=ExpertOpinion(),
+            research_method="Error - Both Services Failed"
+        )
 
     def _get_system_prompt(self) -> str:
         """Get the system prompt for LLM fact-checking."""
         return """You are a professional fact-checker with access to extensive knowledge across multiple domains including science, politics, economics, history, and current events.
-
-Your task is to fact-check statements using your trained knowledge base. You must be thorough, accurate, and unbiased in your analysis.
-
-FACT-CHECKING CRITERIA:
-- TRUE: Statement is accurate according to reliable sources and scientific consensus
-- FALSE: Statement is demonstrably incorrect or contradicted by evidence
-- MISLEADING: Statement contains some truth but presents it in a way that creates false impressions
-- PARTIALLY_TRUE: Statement is partially correct but missing important context or nuance
-- UNVERIFIABLE: Insufficient reliable information available to make a determination
-
-EXPERT PERSPECTIVES (each max 4 sentences):
-- CRITIC: Looks for hidden truths and gaps in statements, examining underlying assumptions and potential conspiratorial elements
-- DEVIL: Represents minority viewpoints and finds logical reasoning behind dissenting sources, playing devil's advocate
-- NERD: Provides statistical background, numbers, and data-driven context to support the verdict
-- PSYCHIC: Analyzes psychological motivations behind the statement, uncovering manipulation tactics and goals
-
-RESPONSE FORMAT:
-Return a JSON object with this exact structure:
-{
-    "valid_sources": "number (percentage agreement across X unique sources)",
-    "verdict": "One sentence verdict explaining your fact-check conclusion",
-    "status": "TRUE/FALSE/MISLEADING/PARTIALLY_TRUE/UNVERIFIABLE",
-    "correction": "If statement is false/misleading, provide the accurate version in one sentence, otherwise null",
-    "resources": [
-        "https://reliable-source1.com/relevant-article",
-        "https://reliable-source2.org/scientific-study",
-        "https://reliable-source3.edu/research-paper"
-    ],
-    "experts": {
-        "critic": "Critical perspective examining hidden truths and gaps (max 4 sentences)",
-        "devil": "Devil's advocate representing minority viewpoints (max 4 sentences)",
-        "nerd": "Statistical and data-driven analysis (max 4 sentences)",
-        "psychic": "Psychological motivation analysis (max 4 sentences)"
-    }
-}
-
-GUIDELINES:
-- Base your analysis on scientific consensus, peer-reviewed research, and authoritative sources
-- Consider the context and how the statement might be interpreted
-- Provide 3 major URLs to reputable sources that can verify your analysis
-- Be specific about the level of agreement among sources
-- Expert perspectives should be distinct and offer different analytical angles
-- Keep expert opinions concise but insightful (max 4 sentences each)"""
+                    Your task is to fact-check statements using your trained knowledge base. You must be thorough, accurate, and unbiased in your analysis.""" + factcheck_prompt
 
     def _get_user_prompt(self, request: LLMResearchRequest) -> str:
         """Get the user prompt with the specific research request."""
@@ -208,4 +321,4 @@ Each expert perspective should be clear, concise (max 4 sentences), and provide 
 
 
 # Create service instance
-llm_research_service = LLMResearchService()
+llm_research_service = LlmResearchService()
