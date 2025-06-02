@@ -7,7 +7,7 @@ from services.profile import (
     ProfileUpdate, 
     ProfileResponse
 )
-from services.db_research import db_research_service
+from services.llm_research.db_research import db_research_service
 
 # Configure logging
 logger = logging.getLogger(__name__)

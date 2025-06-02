@@ -6,7 +6,7 @@ from services.llm_transcription_analysis import (
     TranscriptionAnalysisInput, 
     TranscriptionAnalysisResult
 )
-from services.llm_research import llm_research_service
+from services.llm_research.llm_research_legacy import llm_research_service
 from models.research_models import (
     LLMResearchRequest,
     ExpertOpinion,
@@ -17,7 +17,7 @@ from schemas.research import (
     ResearchRequestAPI,
     EnhancedLLMResearchResponse
 )
-from services.db_research import db_research_service, ResearchRequest
+from services.llm_research.db_research import db_research_service, ResearchRequest
 from services.profile import profile_service  # Add this import
 
 # Configure logging

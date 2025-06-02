@@ -1,5 +1,5 @@
 # Legacy import support - redirect to new structure
-from services.llm_research import llm_research_service
+from services.llm_research.llm_interaction_service import llm_research_service
 from models.research_models import (
     LLMResearchRequest,
     LLMResearchResponse,
@@ -13,7 +13,7 @@ from models.research_models import (
 __all__ = [
     'llm_research_service',
     'LLMResearchRequest',
-    'LLMResearchResponse', 
+    'LLMResearchResponse',
     'ExpertOpinion',
     'ResourceAnalysis',
     'ResourceReference',

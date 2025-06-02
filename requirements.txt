@@ -1,5 +1,8 @@
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-python-multipart==0.0.6
-supabase==1.0.0
+fastapi==0.115.12
+uvicorn[standard]==0.34.3
+python-multipart==0.0.20
+supabase==2.15.2
 pydantic==2.9.0
+python-dotenv==1.1.0
+openai==1.82.1
+yt_dlp==2025.5.22

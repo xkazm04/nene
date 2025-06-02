@@ -1,7 +1,5 @@
-import os
 import logging
 from abc import ABC, abstractmethod
-from typing import Optional
 from dotenv import load_dotenv
 from models.research_models import LLMResearchRequest, LLMResearchResponse
 

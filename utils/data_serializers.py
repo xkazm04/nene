@@ -1,6 +1,6 @@
 import logging
 from typing import Dict, Any, List, Optional
-from models.research_models import ExpertOpinion, ResourceAnalysis, ResourceReference
+from models.research_models import ExpertOpinion, ResourceAnalysis
 
 logger = logging.getLogger(__name__)
 

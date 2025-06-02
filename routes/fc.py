@@ -2,11 +2,11 @@ from fastapi import APIRouter, HTTPException
 from datetime import datetime
 import logging
 from services.llm_transcription_analysis import (
-    llm_analysis_service, 
-    TranscriptionAnalysisInput, 
+    llm_analysis_service,
+    TranscriptionAnalysisInput,
     TranscriptionAnalysisResult
 )
-from services.llm_research import llm_research_service
+from services.llm_research.llm_research_legacy import llm_research_service 
 from models.research_models import (
     LLMResearchRequest,
     ExpertOpinion,
@@ -17,8 +17,8 @@ from schemas.research import (
     ResearchRequestAPI,
     EnhancedLLMResearchResponse
 )
-from services.db_research import db_research_service, ResearchRequest
-from services.profile import profile_service  # Add this import
+from services.llm_research.db_research import db_research_service, ResearchRequest
+from services.profile import profile_service  
 
 # Configure logging
 logger = logging.getLogger(__name__)

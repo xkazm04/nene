@@ -1,12 +1,11 @@
 import os
 import json
 import logging
-from typing import Optional
 import google.generativeai as genai
 from models.research_models import LLMResearchRequest, LLMResearchResponse
 from services.llm_clients.base_client import BaseLLMClient
-from services.response_parser import ResponseParser
-from services.prompt_builder import PromptBuilder
+from utils.response_parser import ResponseParser
+from utils.prompt_builder import PromptBuilder
 
 logger = logging.getLogger(__name__)
 
