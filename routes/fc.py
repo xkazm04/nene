@@ -6,10 +6,11 @@ from services.llm_transcription_analysis import (
     TranscriptionAnalysisInput, 
     TranscriptionAnalysisResult
 )
-from services.llm_research import (
-    llm_research_service,
+from services.llm_research import llm_research_service
+from models.research_models import (
     LLMResearchRequest,
     ExpertOpinion,
+    StatementCategory
 )
 from schemas.research import (
     AnalysisRequest,
@@ -69,7 +70,7 @@ async def research_statement(request: ResearchRequestAPI) -> EnhancedLLMResearch
     Research a statement using LLM knowledge base for fact-checking.
     
     Args:
-        request: Research request containing the statement, source, context, datetime, and statement_date
+        request: Research request containing the statement, source, context, datetime, statement_date, country, and category
         
     Returns:
         EnhancedLLMResearchResponse: Complete fact-check result with request data
@@ -79,6 +80,7 @@ async def research_statement(request: ResearchRequestAPI) -> EnhancedLLMResearch
     """
     try:
         logger.info(f"Starting LLM research for statement: {request.statement[:100]}...")
+        logger.info(f"Country: {request.country}, Category: {request.category}")
         
         # Check for duplicates first
         database_id = None
@@ -98,8 +100,10 @@ async def research_statement(request: ResearchRequestAPI) -> EnhancedLLMResearch
                         verdict=existing_result.get("verdict", ""),
                         status=existing_result.get("status", "UNVERIFIABLE"),
                         correction=existing_result.get("correction"),
-                        resources_agreed=existing_result.get("resources_agreed", []),
-                        resources_disagreed=existing_result.get("resources_disagreed", []),
+                        country=existing_result.get("country"),
+                        category=StatementCategory(existing_result.get("category")) if existing_result.get("category") else None,
+                        resources_agreed=existing_result.get("resources_agreed", {}),
+                        resources_disagreed=existing_result.get("resources_disagreed", {}),
                         experts=ExpertOpinion(**existing_result.get("experts", {})),
                         processed_at=datetime.fromisoformat(existing_result.get("processed_at", datetime.utcnow().isoformat())),
                         database_id=existing_id,
@@ -112,22 +116,25 @@ async def research_statement(request: ResearchRequestAPI) -> EnhancedLLMResearch
         llm_request = LLMResearchRequest(
             statement=request.statement,
             source=request.source,
-            context=request.context
+            context=request.context,
+            country=request.country,
+            category=request.category
         )
         
         # Perform research using LLM
         result = llm_research_service.research_statement(llm_request)
         
-        # Create enhanced response with request data
+        # Create enhanced response with request data and safe field access
         enhanced_result = EnhancedLLMResearchResponse(
             request=request,
             valid_sources=result.valid_sources,
             verdict=result.verdict,
             status=result.status,
             correction=result.correction,
-            resources_agreed=result.resources_agreed,  # Updated
-            resources_disagreed=result.resources_disagreed,  # New
-            experts=result.experts,
+            country=result.country,
+            category=result.category,
+            resources_agreed=result.resources_agreed,  
+            resources_disagreed=result.resources_disagreed,  
             processed_at=datetime.utcnow(),
             is_duplicate=is_duplicate
         )
@@ -140,7 +147,9 @@ async def research_statement(request: ResearchRequestAPI) -> EnhancedLLMResearch
                 source=request.source,
                 context=request.context,
                 datetime=request.datetime,
-                statement_date=request.statement_date
+                statement_date=request.statement_date,
+                country=request.country,
+                category=request.category.value if request.category else None
             )
             
             database_id = db_research_service.save_research_result(db_request, result)
@@ -156,8 +165,7 @@ async def research_statement(request: ResearchRequestAPI) -> EnhancedLLMResearch
             logger.warning("API request will continue despite database save failure")
         
         logger.info("LLM research completed successfully")
-        logger.info(f"Status: {result.status}")
-        logger.info(f"Valid sources: {result.valid_sources}")
+        logger.info(f"Status: {result.status}, Country: {result.country}, Category: {result.category}")
         
         return enhanced_result
         

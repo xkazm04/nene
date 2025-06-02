@@ -1,9 +1,10 @@
 from pydantic import BaseModel
 from datetime import datetime, date
 from typing import Optional
-from services.llm_research import (
+from models.research_models import (
     ExpertOpinion,
-    ResourceAnalysis  
+    ResourceAnalysis,
+    StatementCategory
 )
 
 # llm - route
@@ -18,7 +19,9 @@ class ResearchRequestAPI(BaseModel):
     source: str = "Unknown"
     context: str = ""
     datetime: datetime
-    statement_date: Optional[date] = None 
+    statement_date: Optional[date] = None
+    country: Optional[str] = None  # ISO country code (e.g., "us", "gb", "de")
+    category: Optional[StatementCategory] = None  
 
 class EnhancedLLMResearchResponse(BaseModel):
     request: ResearchRequestAPI
@@ -26,13 +29,13 @@ class EnhancedLLMResearchResponse(BaseModel):
     verdict: str
     status: str
     correction: Optional[str] = None
-    resources_agreed: ResourceAnalysis  
-    resources_disagreed: ResourceAnalysis  
-    experts: ExpertOpinion
+    country: Optional[str] = None  # ISO country code
+    category: Optional[StatementCategory] = None  
+    resources_disagreed: Optional[ResourceAnalysis] = None  
+    experts: Optional[ExpertOpinion] = None
     processed_at: datetime
     database_id: Optional[str] = None
-    is_duplicate: bool = False  
-    
+    is_duplicate: bool = False
     
 # DB - service
 class ResearchRequest(BaseModel):
@@ -40,5 +43,6 @@ class ResearchRequest(BaseModel):
     source: str
     context: str
     datetime: datetime
-    statement_date: Optional[date] = None  # New field for when the statement was made
-
+    statement_date: Optional[date] = None
+    country: Optional[str] = None  # ISO country code
+    category: Optional[str] = None

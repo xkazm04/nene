@@ -1,5 +1,4 @@
 factcheck_prompt = """
-
 FACT-CHECKING CRITERIA:
 - TRUE: Statement is accurate according to reliable sources and scientific consensus
 - FALSE: Statement is demonstrably incorrect or contradicted by evidence
@@ -23,6 +22,18 @@ SOURCE CATEGORIZATION:
 COUNTRY IDENTIFICATION:
 Identify the primary country/region of each source using ISO country codes (us, gb, de, fr, ca, au, etc.)
 
+STATEMENT CATEGORIES:
+- politics: Political statements, governance, elections, policy announcements
+- economy: Economic data, financial claims, market statements, trade information
+- environment: Climate change, environmental policies, sustainability claims
+- military: Defense spending, military capabilities, security matters
+- healthcare: Medical claims, health policy, pandemic information
+- education: Educational statistics, policy, institutional claims
+- technology: Tech innovations, digital policy, cybersecurity
+- social: Social issues, demographics, cultural statements
+- international: Foreign relations, international agreements, global affairs
+- other: Statements that don't fit the above categories
+
 RESPONSE FORMAT:
 Return a JSON object with this exact structure:
 {
@@ -30,6 +41,8 @@ Return a JSON object with this exact structure:
     "verdict": "One sentence verdict explaining your fact-check conclusion",
     "status": "TRUE/FALSE/MISLEADING/PARTIALLY_TRUE/UNVERIFIABLE",
     "correction": "If statement is false/misleading, provide the accurate version in one sentence, otherwise null",
+    "country": "ISO country code of statement origin/speaker (e.g., 'us', 'gb', 'de')",
+    "category": "politics/economy/environment/military/healthcare/education/technology/social/international/other",
     "resources_agreed": {
         "total": "percentage (e.g., 85%)",
         "count": 0,
@@ -88,8 +101,17 @@ GUIDELINES:
 - Prioritize recent, relevant, and high-credibility sources
 - Expert perspectives should be distinct and offer different analytical angles
 - Keep expert opinions concise but insightful (max 3 sentences each)
+- Consider country-specific context and political landscape when analyzing statements
+- Apply domain-specific expertise based on the statement category
+- Determine appropriate country and category if not provided in the input
 
 CREDIBILITY ASSESSMENT:
 - HIGH: Government agencies, major academic institutions, established news organizations with strong editorial standards, peer-reviewed journals
 - MEDIUM: Regional news outlets, professional associations, specialized publications with good reputation
-- LOW: Blogs, opinion sites, sources with known bias or poor fact-checking records, unverified sources"""
+- LOW: Blogs, opinion sites, sources with known bias or poor fact-checking records, unverified sources
+
+COUNTRY & CATEGORY DETERMINATION:
+- If speaker country is not provided, determine it from context, source, or statement content
+- If category is not provided, classify the statement based on its primary subject matter
+- Default to 'unknown' for country and 'other' for category only if truly undeterminable
+"""
