@@ -18,13 +18,12 @@ from schemas.research import (
     EnhancedLLMResearchResponse
 )
 from services.db_research import db_research_service, ResearchRequest
+from services.profile import profile_service  # Add this import
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["fact-checking"])
-
-
 
 @router.post("/extract", response_model=TranscriptionAnalysisResult)
 async def analyze_for_fact_checking(request: AnalysisRequest) -> TranscriptionAnalysisResult:
@@ -80,7 +79,20 @@ async def research_statement(request: ResearchRequestAPI) -> EnhancedLLMResearch
     """
     try:
         logger.info(f"Starting LLM research for statement: {request.statement[:100]}...")
-        logger.info(f"Country: {request.country}, Category: {request.category}")
+        logger.info(f"Source: {request.source}, Country: {request.country}, Category: {request.category}")
+        
+        # Process speaker profile (non-blocking) and get profile_id
+        profile_id = None
+        if request.source and request.source.strip() and request.source != "Unknown":
+            try:
+                profile_id = profile_service.get_or_create_profile(request.source)
+                if profile_id:
+                    logger.debug(f"Profile processed for speaker: {request.source} -> {profile_id}")
+                else:
+                    logger.warning(f"Failed to process profile for speaker: {request.source}")
+            except Exception as profile_error:
+                # Non-blocking: log error but continue with research
+                logger.error(f"Profile processing failed for speaker '{request.source}': {str(profile_error)}")
         
         # Check for duplicates first
         database_id = None
@@ -107,7 +119,8 @@ async def research_statement(request: ResearchRequestAPI) -> EnhancedLLMResearch
                         experts=ExpertOpinion(**existing_result.get("experts", {})),
                         processed_at=datetime.fromisoformat(existing_result.get("processed_at", datetime.utcnow().isoformat())),
                         database_id=existing_id,
-                        is_duplicate=True
+                        is_duplicate=True,
+                        profile_id=existing_result.get("profile_id")  # Include profile_id from existing result
                     )
         except Exception as dup_error:
             logger.warning(f"Error checking for duplicates: {dup_error}. Proceeding with new analysis.")
@@ -118,11 +131,16 @@ async def research_statement(request: ResearchRequestAPI) -> EnhancedLLMResearch
             source=request.source,
             context=request.context,
             country=request.country,
-            category=request.category
+            category=request.category,
+            profile_id=profile_id  # Include profile_id in LLM request
         )
         
         # Perform research using LLM
         result = llm_research_service.research_statement(llm_request)
+        
+        # Set profile_id in result if not already set
+        if profile_id and not result.profile_id:
+            result.profile_id = profile_id
         
         # Create enhanced response with request data and safe field access
         enhanced_result = EnhancedLLMResearchResponse(
@@ -134,9 +152,11 @@ async def research_statement(request: ResearchRequestAPI) -> EnhancedLLMResearch
             country=result.country,
             category=result.category,
             resources_agreed=result.resources_agreed,  
-            resources_disagreed=result.resources_disagreed,  
+            resources_disagreed=result.resources_disagreed,
+            experts=result.experts,
             processed_at=datetime.utcnow(),
-            is_duplicate=is_duplicate
+            is_duplicate=is_duplicate,
+            profile_id=profile_id  # Include profile_id in response
         )
         
         # Try to save to database (non-blocking)
@@ -149,7 +169,8 @@ async def research_statement(request: ResearchRequestAPI) -> EnhancedLLMResearch
                 datetime=request.datetime,
                 statement_date=request.statement_date,
                 country=request.country,
-                category=request.category.value if request.category else None
+                category=request.category.value if request.category else None,
+                profile_id=profile_id  # Include profile_id in database request
             )
             
             database_id = db_research_service.save_research_result(db_request, result)
@@ -166,6 +187,8 @@ async def research_statement(request: ResearchRequestAPI) -> EnhancedLLMResearch
         
         logger.info("LLM research completed successfully")
         logger.info(f"Status: {result.status}, Country: {result.country}, Category: {result.category}")
+        if profile_id:
+            logger.info(f"Speaker profile ID: {profile_id}")
         
         return enhanced_result
         
@@ -211,6 +234,9 @@ async def get_research_result(research_id: str):
 async def search_research_results(
     search: str = None,
     status: str = None,
+    country: str = None,
+    category: str = None,
+    profile: str = None,  # Add profile filter
     limit: int = 50,
     offset: int = 0
 ):
@@ -220,6 +246,9 @@ async def search_research_results(
     Args:
         search: Text to search for
         status: Filter by status
+        country: Filter by country
+        category: Filter by category
+        profile: Filter by profile ID
         limit: Maximum results to return
         offset: Number of results to skip
         
@@ -227,11 +256,14 @@ async def search_research_results(
         List of research results
     """
     try:
-        logger.info(f"Searching research results: search='{search}', status='{status}'")
+        logger.info(f"Searching research results: search='{search}', status='{status}', country='{country}', category='{category}', profile='{profile}'")
         
         results = db_research_service.search_research_results(
             search_text=search,
             status_filter=status,
+            country_filter=country,
+            category_filter=category,
+            profile_filter=profile,  # Include profile filter
             limit=limit,
             offset=offset
         )

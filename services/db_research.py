@@ -1,33 +1,21 @@
-import os
 import logging
 from typing import Optional, Dict, Any, List
 from datetime import datetime
-from dotenv import load_dotenv
-from supabase import create_client, Client
-from models.research_models import LLMResearchResponse, ExpertOpinion, ResourceAnalysis
+from models.research_models import LLMResearchResponse, ResourceAnalysis
+from models.db_models import ResearchResultDB, ResearchResourceDB, SearchFilters, AnalyticsSummary
 from schemas.research import ResearchRequest
+from repositories.research_repository import research_repository
+from services.data_serializers import data_serializer
 
-# Load environment variables
-load_dotenv()
-
-# Configure logging
 logger = logging.getLogger(__name__)
 
-class SupabaseResearchService:
+class ResearchService:
+    """Service layer for research operations with clean separation of concerns."""
+    
     def __init__(self):
-        """Initialize Supabase client with credentials from environment."""
-        self.supabase_url = os.getenv("SUPABASE_URL")
-        self.supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-        
-        if not self.supabase_url or not self.supabase_key:
-            raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set in environment variables")
-        
-        try:
-            self.supabase: Client = create_client(self.supabase_url, self.supabase_key)
-            logger.info("Supabase research service initialized successfully")
-        except Exception as e:
-            logger.error(f"Failed to initialize Supabase client: {str(e)}")
-            raise
+        self.repository = research_repository
+        self.serializer = data_serializer
+        logger.info("Research service initialized successfully")
     
     def check_duplicate_statement(self, statement: str) -> Optional[str]:
         """
@@ -39,32 +27,11 @@ class SupabaseResearchService:
         Returns:
             str: ID of existing record if duplicate found, None otherwise
         """
-        try:
-            logger.debug(f"Checking for duplicate statement: {statement[:50]}...")
-            
-            response = self.supabase.table("research_results").select("id, processed_at").eq("statement", statement).limit(1).execute()
-            
-            if response.data:
-                existing_id = response.data[0]["id"]
-                existing_date = response.data[0]["processed_at"]
-                logger.info(f"Duplicate statement found - existing record ID: {existing_id}, processed: {existing_date}")
-                return existing_id
-            
-            logger.debug("No duplicate statement found")
-            return None
-            
-        except Exception as e:
-            logger.error(f"Error checking for duplicate statement: {str(e)}")
-            # Return None to allow save attempt rather than blocking on error
-            return None
+        return self.repository.find_duplicate_statement(statement)
     
-    def save_research_result(
-        self, 
-        request: ResearchRequest, 
-        result: LLMResearchResponse
-    ) -> Optional[str]:
+    def save_research_result(self, request: ResearchRequest, result: LLMResearchResponse) -> Optional[str]:
         """
-        Save research result to Supabase database.
+        Save research result to database with full transaction support.
         
         Args:
             request: Original research request
@@ -85,49 +52,23 @@ class SupabaseResearchService:
                 logger.warning(f"Duplicate statement detected - not saving. Existing record ID: {existing_id}")
                 return existing_id
             
-            # Prepare data for database insertion with safe handling of optional fields
-            db_data = {
-                "statement": request.statement,
-                "source": request.source if request.source != "Unknown" else None,
-                "context": request.context if request.context else None,
-                "request_datetime": request.datetime.isoformat(),
-                "statement_date": request.statement_date.isoformat() if request.statement_date else None,
-                "country": request.country,
-                "category": request.category,
-                "valid_sources": result.valid_sources,
-                "verdict": result.verdict,
-                "status": result.status,
-                "correction": result.correction,
-                "resources_agreed": self._serialize_resource_analysis(result.resources_agreed) if result.resources_agreed else None,
-                "resources_disagreed": self._serialize_resource_analysis(result.resources_disagreed) if result.resources_disagreed else None,
-                "experts": self._serialize_experts(result.experts) if result.experts else None,
-                "processed_at": datetime.utcnow().isoformat()
-            }
+            # Prepare research result data
+            db_data = self._prepare_research_result_data(request, result)
             
-            logger.debug(f"Database payload prepared: {list(db_data.keys())}")
+            # Save main research result
+            research_result_id = self.repository.create_research_result(db_data)
             
-            # Insert research result
-            response = self.supabase.table("research_results").insert(db_data).execute()
+            if not research_result_id:
+                raise Exception("Failed to create research result record")
             
-            if not response.data:
-                raise Exception("No data returned from database insert")
+            # Log profile association if present
+            if request.profile_id:
+                logger.info(f"Research result linked to profile: {request.profile_id}")
             
-            research_result_id = response.data[0]["id"]
-            logger.info(f"New research result saved with ID: {research_result_id}")
+            # Save legacy resources for backwards compatibility
+            self._save_legacy_resources(research_result_id, result)
             
-            # Save legacy resources for backwards compatibility (handle None case)
-            legacy_resources = []
-            if result.resources_agreed and result.resources_disagreed:
-                legacy_resources = self._extract_legacy_resources(result.resources_agreed, result.resources_disagreed)
-            elif result.resources_agreed:
-                legacy_resources = self._extract_legacy_resources(result.resources_agreed, ResourceAnalysis(total="0%", count=0))
-            elif result.resources_disagreed:
-                legacy_resources = self._extract_legacy_resources(ResourceAnalysis(total="0%", count=0), result.resources_disagreed)
-        
-            if legacy_resources:
-                self._save_resources(research_result_id, legacy_resources)
-            
-            logger.info(f"Successfully saved research result and {len(legacy_resources)} legacy resources to database")
+            logger.info(f"Successfully saved research result to database with ID: {research_result_id}")
             return research_result_id
             
         except Exception as e:
@@ -135,112 +76,6 @@ class SupabaseResearchService:
             logger.error(error_msg)
             logger.error(f"Error type: {type(e).__name__}")
             raise Exception(error_msg)
-    
-    def _extract_legacy_resources(self, resources_agreed: ResourceAnalysis, resources_disagreed: ResourceAnalysis) -> List[str]:
-        """
-        Extract URLs from new resource structure for legacy compatibility.
-        
-        Args:
-            resources_agreed: Agreed resource analysis
-            resources_disagreed: Disagreed resource analysis
-            
-        Returns:
-            List of URLs for legacy resources table
-        """
-        legacy_urls = []
-        
-        # Extract URLs from agreed resources
-        for ref in resources_agreed.references:
-            legacy_urls.append(ref.url)
-        
-        # Extract URLs from disagreed resources
-        for ref in resources_disagreed.references:
-            legacy_urls.append(ref.url)
-        
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_urls = []
-        for url in legacy_urls:
-            if url not in seen:
-                seen.add(url)
-                unique_urls.append(url)
-        
-        return unique_urls
-    
-    def _save_resources(self, research_result_id: str, resources: List[str]) -> None:
-        """Save research resources to database for legacy compatibility."""
-        try:
-            logger.debug(f"Saving {len(resources)} legacy resources for research result {research_result_id}")
-            
-            resources_data = [
-                {
-                    "research_result_id": research_result_id,
-                    "url": resource,
-                    "order_index": index + 1
-                }
-                for index, resource in enumerate(resources)
-            ]
-            
-            if not resources_data:
-                logger.debug("No resources to save")
-                return
-            
-            response = self.supabase.table("research_resources").insert(resources_data).execute()
-            
-            if not response.data:
-                raise Exception("No data returned from resources insert")
-            
-            logger.debug(f"Successfully saved {len(response.data)} legacy resources")
-            
-        except Exception as e:
-            logger.error(f"Failed to save legacy resources: {str(e)}")
-            # Don't re-raise since main result was saved successfully
-    
-    def _serialize_resource_analysis(self, resource_analysis: ResourceAnalysis) -> Dict[str, Any]:
-        """
-        Convert ResourceAnalysis to dictionary for JSON storage.
-        
-        Args:
-            resource_analysis: ResourceAnalysis object
-            
-        Returns:
-            Dict representation suitable for JSON storage
-        """
-        return {
-            "total": resource_analysis.total,
-            "count": resource_analysis.count,
-            "mainstream": resource_analysis.mainstream,
-            "governance": resource_analysis.governance,
-            "academic": resource_analysis.academic,
-            "medical": resource_analysis.medical,
-            "other": resource_analysis.other,
-            "major_countries": resource_analysis.major_countries,
-            "references": [
-                {
-                    "url": ref.url,
-                    "title": ref.title,
-                    "category": ref.category,
-                    "country": ref.country,
-                    "credibility": ref.credibility
-                }
-                for ref in resource_analysis.references
-            ]
-        }
-    
-    def _serialize_experts(self, experts: ExpertOpinion) -> Dict[str, Any]:
-        """Convert ExpertOpinion to dictionary for JSON storage."""
-        expert_dict = {}
-        
-        if experts.critic is not None:
-            expert_dict["critic"] = experts.critic
-        if experts.devil is not None:
-            expert_dict["devil"] = experts.devil
-        if experts.nerd is not None:
-            expert_dict["nerd"] = experts.nerd
-        if experts.psychic is not None:
-            expert_dict["psychic"] = experts.psychic
-            
-        return expert_dict
     
     def get_research_result(self, result_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -255,22 +90,17 @@ class SupabaseResearchService:
         try:
             logger.debug(f"Retrieving research result: {result_id}")
             
-            # Get main result with all new fields
-            response = self.supabase.table("research_results").select("*").eq("id", result_id).execute()
+            # Get main result
+            result = self.repository.get_research_result_by_id(result_id)
             
-            if not response.data:
-                logger.warning(f"Research result not found: {result_id}")
+            if not result:
                 return None
             
-            result = response.data[0]
-            
             # Get legacy resources for backwards compatibility
-            resources_response = self.supabase.table("research_resources").select("url").eq("research_result_id", result_id).order("order_index").execute()
+            resources = self.repository.get_research_resources(result_id)
+            result["resources"] = resources
             
-            # Add legacy resources field for backwards compatibility
-            result["resources"] = [r["url"] for r in resources_response.data] if resources_response.data else []
-            
-            logger.debug(f"Retrieved research result with {len(result['resources'])} legacy resources")
+            logger.debug(f"Retrieved research result with {len(resources)} legacy resources")
             return result
             
         except Exception as e:
@@ -283,17 +113,19 @@ class SupabaseResearchService:
         status_filter: Optional[str] = None,
         country_filter: Optional[str] = None,
         category_filter: Optional[str] = None,
+        profile_filter: Optional[str] = None,
         limit: int = 50,
         offset: int = 0
     ) -> List[Dict[str, Any]]:
         """
-        Search research results with optional filters including new fields.
+        Search research results with optional filters.
         
         Args:
             search_text: Text to search in statement, source, context
             status_filter: Filter by status (TRUE, FALSE, etc.)
             country_filter: Filter by country ISO code
             category_filter: Filter by statement category
+            profile_filter: Filter by profile ID
             limit: Maximum number of results
             offset: Number of results to skip
             
@@ -301,33 +133,47 @@ class SupabaseResearchService:
             List of research results
         """
         try:
-            logger.debug(f"Searching research results: text='{search_text}', status='{status_filter}', country='{country_filter}', category='{category_filter}'")
-            
-            query = self.supabase.table("research_results").select(
-                "id, statement, source, status, statement_date, country, category, processed_at"
+            filters = SearchFilters(
+                search_text=search_text,
+                status_filter=status_filter,
+                country_filter=country_filter,
+                category_filter=category_filter,
+                profile_filter=profile_filter,
+                limit=limit,
+                offset=offset
             )
             
-            if status_filter:
-                query = query.eq("status", status_filter)
-                
-            if country_filter:
-                query = query.eq("country", country_filter)
-                
-            if category_filter:
-                query = query.eq("category", category_filter)
-            
-            if search_text:
-                # Simple text search - Supabase will handle more complex search if needed
-                query = query.or_(f"statement.ilike.%{search_text}%,source.ilike.%{search_text}%,context.ilike.%{search_text}%")
-            
-            response = query.order("processed_at", desc=True).range(offset, offset + limit - 1).execute()
-            
-            logger.debug(f"Found {len(response.data) if response.data else 0} research results")
-            return response.data or []
+            return self.repository.search_research_results(filters)
             
         except Exception as e:
             logger.error(f"Failed to search research results: {str(e)}")
             return []
+    
+    def get_profile_statement_count(self, profile_id: str) -> int:
+        """
+        Get total count of research results for a specific profile.
+        
+        Args:
+            profile_id: Profile UUID
+            
+        Returns:
+            int: Total count of statements for the profile
+        """
+        return self.repository.get_profile_statement_count(profile_id)
+    
+    def get_profile_statements(self, profile_id: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
+        """
+        Get research results for a specific profile.
+        
+        Args:
+            profile_id: Profile UUID
+            limit: Maximum results to return
+            offset: Number of results to skip
+            
+        Returns:
+            List of research results for the profile
+        """
+        return self.repository.get_profile_statements(profile_id, limit, offset)
     
     def get_analytics_summary(self) -> Dict[str, Any]:
         """
@@ -337,35 +183,88 @@ class SupabaseResearchService:
             Dict containing analytics data
         """
         try:
-            logger.debug("Retrieving analytics summary")
-            
-            # Get overall counts by status
-            status_response = self.supabase.table("research_results").select("status", count="exact").execute()
-            
-            # Get counts by country
-            country_response = self.supabase.table("research_results").select("country", count="exact").not_.is_("country", "null").execute()
-            
-            # Get counts by category
-            category_response = self.supabase.table("research_results").select("category", count="exact").not_.is_("category", "null").execute()
-            
-            # Get recent activity (last 7 days)
-            recent_response = self.supabase.table("research_results").select("processed_at", count="exact").gte("processed_at", (datetime.utcnow() - datetime.timedelta(days=7)).isoformat()).execute()
-            
-            return {
-                "total_statements": status_response.count or 0,
-                "recent_activity": recent_response.count or 0,
-                "countries_analyzed": country_response.count or 0,
-                "categories_covered": category_response.count or 0
-            }
-            
+            summary = self.repository.get_analytics_summary()
+            return summary.model_dump()
         except Exception as e:
             logger.error(f"Failed to retrieve analytics summary: {str(e)}")
             return {
                 "total_statements": 0,
                 "recent_activity": 0,
                 "countries_analyzed": 0,
-                "categories_covered": 0
+                "categories_covered": 0,
+                "linked_to_profiles": 0
             }
+    
+    def _prepare_research_result_data(self, request: ResearchRequest, result: LLMResearchResponse) -> ResearchResultDB:
+        """
+        Prepare research result data for database insertion.
+        
+        Args:
+            request: Original research request
+            result: LLM research response
+            
+        Returns:
+            ResearchResultDB: Prepared data for database insertion
+        """
+        return ResearchResultDB(
+            statement=request.statement,
+            source=request.source if request.source != "Unknown" else None,
+            context=request.context if request.context else None,
+            request_datetime=request.datetime.isoformat(),
+            statement_date=request.statement_date.isoformat() if request.statement_date else None,
+            country=request.country,
+            category=request.category,
+            profile_id=request.profile_id,
+            valid_sources=result.valid_sources,
+            verdict=result.verdict,
+            status=result.status,
+            correction=result.correction,
+            resources_agreed=self.serializer.serialize_resource_analysis(result.resources_agreed),
+            resources_disagreed=self.serializer.serialize_resource_analysis(result.resources_disagreed),
+            experts=self.serializer.serialize_experts(result.experts),
+            processed_at=datetime.utcnow().isoformat()
+        )
+    
+    def _save_legacy_resources(self, research_result_id: str, result: LLMResearchResponse) -> None:
+        """
+        Save legacy resources for backwards compatibility.
+        
+        Args:
+            research_result_id: Research result ID
+            result: LLM research response
+        """
+        try:
+            # Extract legacy URLs from resources
+            legacy_urls = self.serializer.extract_legacy_resources(
+                result.resources_agreed, 
+                result.resources_disagreed
+            )
+            
+            if not legacy_urls:
+                logger.debug("No legacy resources to save")
+                return
+            
+            # Create resource records
+            resources = [
+                ResearchResourceDB(
+                    research_result_id=research_result_id,
+                    url=url,
+                    order_index=index + 1
+                )
+                for index, url in enumerate(legacy_urls)
+            ]
+            
+            # Save to database
+            success = self.repository.create_research_resources(resources)
+            
+            if success:
+                logger.debug(f"Successfully saved {len(resources)} legacy resources")
+            else:
+                logger.warning("Failed to save some legacy resources")
+                
+        except Exception as e:
+            logger.error(f"Failed to save legacy resources: {str(e)}")
+            # Don't re-raise since main result was saved successfully
 
 # Create service instance
-db_research_service = SupabaseResearchService()
+db_research_service = ResearchService()

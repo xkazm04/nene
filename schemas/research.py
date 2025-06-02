@@ -31,11 +31,13 @@ class EnhancedLLMResearchResponse(BaseModel):
     correction: Optional[str] = None
     country: Optional[str] = None  # ISO country code
     category: Optional[StatementCategory] = None  
+    resources_agreed: Optional[ResourceAnalysis] = None
     resources_disagreed: Optional[ResourceAnalysis] = None  
     experts: Optional[ExpertOpinion] = None
     processed_at: datetime
     database_id: Optional[str] = None
     is_duplicate: bool = False
+    profile_id: Optional[str] = None 
     
 # DB - service
 class ResearchRequest(BaseModel):
@@ -46,3 +48,4 @@ class ResearchRequest(BaseModel):
     statement_date: Optional[date] = None
     country: Optional[str] = None  # ISO country code
     category: Optional[str] = None
+    profile_id: Optional[str] = None  

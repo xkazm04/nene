@@ -21,6 +21,7 @@ class LLMResearchRequest(BaseModel):
     context: str
     country: Optional[str] = None  # ISO country code (e.g., "us", "gb", "de")
     category: Optional[StatementCategory] = None
+    profile_id: Optional[str] = None  # Add profile_id support
 
 class ExpertOpinion(BaseModel):
     critic: Optional[str] = None
@@ -57,3 +58,4 @@ class LLMResearchResponse(BaseModel):
     resources_disagreed: Optional[ResourceAnalysis] = None  # Make optional
     experts: Optional[ExpertOpinion] = None  # Make optional
     research_method: str  # Track which service was used
+    profile_id: Optional[str] = None  # Add profile_id support
