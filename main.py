@@ -1,6 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routes import api_router
+from config.logging_config import setup_logging
+
+# Initialize logging at the start of your application
+setup_logging(log_level="INFO", log_file="video_processing.log")
+
 
 # Create FastAPI instance
 app = FastAPI(
