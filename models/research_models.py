@@ -49,7 +49,7 @@ class ResourceAnalysis(BaseModel):
 
 class LLMResearchResponse(BaseModel):
     valid_sources: str  # e.g., "15 (85% agreement across 23 unique sources)"
-    verdict: str
+    verdict: str # Final statement with 1-2 sentence summary
     status: Literal["TRUE", "FALSE", "MISLEADING", "PARTIALLY_TRUE", "UNVERIFIABLE"]
     correction: Optional[str] = None  # Corrected statement if original is false/misleading
     country: Optional[str] = None  # ISO country code of speaker/statement origin
