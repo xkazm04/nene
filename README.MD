@@ -9,7 +9,7 @@ uvicorn main:app --reload
 ```bash
 cd nene
 docker build -t nene:latest .
-docker run -d -p 8000:8000 --name nene-container -e SUPABASE_URL="your_local_test_url" -e SUPABASE_SERVICE_ROLE_KEY="your_local_test_key" nene:latest .
+docker run -d -p 8000:8000 nene:latest .
 # docker run -d -p 8000:8000 --name nene-container nene:latest - to test service is running
 # Verify ffmpeg
 docker exec -it nene-container /bin/bash

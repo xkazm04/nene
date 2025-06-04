@@ -18,14 +18,18 @@ COPY requirements.txt .
 # Using --no-cache-dir to reduce image size
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy the .env file (if it exists) for environment variables
+COPY .env* ./
+
 # Copy the rest of the application code into the container
 COPY . .
+
+# Ensure all Python files have proper permissions
+RUN chmod +x main.py
+
 
 # Make port 8000 available to the world outside this container
 EXPOSE 8000
 
-# Define environment variable for the port, Cloud Run will set this.
-ENV PORT 8000
-
 # Run uvicorn when the container launches.
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
