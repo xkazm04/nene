@@ -246,7 +246,7 @@ async def search_research_advanced(
             'category_filter': category_filter,
             'limit_count': limit_count,
             'offset_count': offset_count
-        })
+        }).execute()  # Add .execute() here
         
         if not result.data:
             return []
