@@ -1,13 +1,16 @@
 from pydantic import BaseModel, Field, validator
-from typing import Optional, List, Dict, Any
-from enum import Enum
+from typing import Optional, List
 from datetime import datetime
+from enum import Enum
 import uuid
+from models.top_models.list import ListResponse
 
 class CategoryEnum(str, Enum):
-    MUSIC = "music"
-    SPORTS = "sports"
-    GAMES = "games"
+    sports = "sports"
+    entertainment = "entertainment"
+    technology = "technology"
+    business = "business"
+    other = "other"
 
 class AccoladeType(str, Enum):
     AWARD = "award"
@@ -18,26 +21,6 @@ class VoteValue(int, Enum):
     DOWNVOTE = -1
     UPVOTE = 1
 
-# User Models (unchanged)
-class UserBase(BaseModel):
-    external_id: Optional[str] = None
-    username: Optional[str] = None
-    password: Optional[str] = None
-
-class UserCreate(UserBase):
-    pass
-
-class UserResponse(BaseModel):
-    id: uuid.UUID
-    external_id: Optional[str]
-    username: Optional[str]
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        from_attributes = True
-
-# Accolade Models
 class AccoladeBase(BaseModel):
     type: AccoladeType
     name: str = Field(..., min_length=1, max_length=255)
@@ -141,49 +124,6 @@ class TrendingItemResponse(BaseModel):
     class Config:
         from_attributes = True
 
-# Enhanced List Models
-class ListBase(BaseModel):
-    title: str = Field(..., min_length=1, max_length=255)
-    category: CategoryEnum
-    subcategory: Optional[str] = Field(None, max_length=100)
-    user_id: Optional[uuid.UUID] = None
-    predefined: bool = False
-    size: int = Field(50, ge=1, le=100)
-    time_period: str = Field("all", max_length=50)
-    parent_list_id: Optional[uuid.UUID] = None
-
-class ListCreate(ListBase):
-    pass
-
-class ListUpdate(BaseModel):
-    title: Optional[str] = Field(None, min_length=1, max_length=255)
-    category: Optional[CategoryEnum] = None
-    subcategory: Optional[str] = Field(None, max_length=100)
-    size: Optional[int] = Field(None, ge=1, le=100)
-    time_period: Optional[str] = Field(None, max_length=50)
-
-class ListResponse(ListBase):
-    id: uuid.UUID
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        from_attributes = True
-
-# List Version Models
-class ListVersionResponse(BaseModel):
-    id: uuid.UUID
-    list_id: uuid.UUID
-    version_number: int
-    snapshot_data: Dict[str, Any]
-    change_description: Optional[str]
-    created_by: Optional[uuid.UUID]
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
-# User Engagement Models
 class UserVoteBase(BaseModel):
     list_id: uuid.UUID
     item_id: uuid.UUID
@@ -201,23 +141,7 @@ class UserVoteResponse(UserVoteBase):
     class Config:
         from_attributes = True
 
-class ListCommentBase(BaseModel):
-    comment_text: str = Field(..., min_length=1, max_length=2000)
-    parent_comment_id: Optional[uuid.UUID] = None
 
-class ListCommentCreate(ListCommentBase):
-    list_id: uuid.UUID
-
-class ListCommentResponse(ListCommentBase):
-    id: uuid.UUID
-    list_id: uuid.UUID
-    user_id: uuid.UUID
-    created_at: datetime
-    updated_at: datetime
-    replies: List['ListCommentResponse'] = []
-
-    class Config:
-        from_attributes = True
 
 # Updated List Item Models
 class ListItemBase(BaseModel):
@@ -225,8 +149,10 @@ class ListItemBase(BaseModel):
     item_id: uuid.UUID
     ranking: int = Field(..., ge=1)
 
-class ListItemCreate(ListItemBase):
-    pass
+class ListItemCreate(BaseModel):
+    list_id: uuid.UUID
+    item_id: uuid.UUID
+    ranking: int = Field(..., ge=1)
 
 class ListItemUpdate(BaseModel):
     ranking: int = Field(..., ge=1)
@@ -238,7 +164,8 @@ class ListItemResponse(ListItemBase):
 
     class Config:
         from_attributes = True
-
+        
+    
 class ListItemWithDetails(BaseModel):
     id: uuid.UUID
     ranking: int
@@ -250,6 +177,7 @@ class ListItemWithDetails(BaseModel):
 
     class Config:
         from_attributes = True
+
 
 class ListWithItems(ListResponse):
     items: List[ListItemWithDetails] = []
@@ -281,15 +209,6 @@ class ImageUploadRequest(BaseModel):
 class BulkItemRequest(BaseModel):
     items: List[ItemCreate] = Field(..., description="List of items to create")
 
-class ListSearchFilters(BaseModel):
-    user_id: Optional[uuid.UUID] = None
-    category: Optional[CategoryEnum] = None
-    subcategory: Optional[str] = None
-    predefined: Optional[bool] = None
-    has_items: Optional[bool] = None
-    min_size: Optional[int] = None
-    max_size: Optional[int] = None
-    time_period: Optional[str] = None
 
 class ItemSearchFilters(BaseModel):
     category: Optional[CategoryEnum] = None
@@ -325,18 +244,7 @@ class AdvancedItemSearchFilters(ItemSearchFilters):
     min_appearances: Optional[int] = None
     ranking_position_filter: Optional[str] = None  # "top_10", "top_3", "first_place"
 
-class ListAnalyticsResponse(BaseModel):
-    list_id: uuid.UUID
-    total_votes: int
-    total_comments: int
-    follower_count: int
-    engagement_rate: float
-    average_item_ranking: float
-    most_controversial_item_id: Optional[uuid.UUID]
-    version_count: int
 
-    class Config:
-        from_attributes = True
 
 # Bulk Operations
 class BulkAccoladeRequest(BaseModel):
@@ -348,6 +256,3 @@ class ItemPopularityResponse(BaseModel):
     selection_count: int
     recent_trend: str  # "rising", "stable", "declining"
     popularity_rank: int
-    
-# Enable forward references
-ListCommentResponse.model_rebuild()
