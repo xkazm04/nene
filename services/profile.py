@@ -1,8 +1,7 @@
 import os
 import re
 import logging
-from typing import Optional, Dict, Any, List
-from datetime import datetime
+from typing import Optional,  List
 from dotenv import load_dotenv
 from supabase import create_client, Client
 from pydantic import BaseModel
@@ -278,6 +277,106 @@ class ProfileService:
         except Exception as e:
             logger.error(f"Failed to search profiles: {str(e)}")
             return []
+
+    def get_profile_by_name(self, speaker_name: str) -> Optional[dict]:
+        """Get profile by speaker name using Supabase SDK"""
+        try:
+            if not speaker_name or not speaker_name.strip():
+                logger.warning("Empty speaker name provided to get_profile_by_name")
+                return None
+            
+            # Normalize the name for consistent matching
+            normalized_name = self.normalize_name(speaker_name)
+            
+            if not normalized_name:
+                logger.warning(f"Name normalization resulted in empty string: '{speaker_name}'")
+                return None
+            
+            logger.debug(f"Looking up profile by normalized name: '{normalized_name}'")
+            
+            # Query profiles table using normalized name
+            response = self.supabase.table("profiles").select("*").eq("name_normalized", normalized_name).limit(1).execute()
+            
+            if response.data:
+                profile = response.data[0]
+                logger.debug(f"Found profile by name: ID={profile['id']}, Name='{profile['name']}'")
+                return profile
+            else:
+                logger.debug(f"No profile found for name: '{speaker_name}' (normalized: '{normalized_name}')")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Failed to get profile by name '{speaker_name}': {e}")
+            return None
+
+    def create_profile(self, speaker_name: str) -> Optional[dict]:
+        """Create new profile for speaker using Supabase SDK"""
+        try:
+            if not speaker_name or not speaker_name.strip():
+                logger.warning("Empty speaker name provided to create_profile")
+                return None
+            
+            # Normalize the name for consistent storage
+            normalized_name = self.normalize_name(speaker_name)
+            
+            if not normalized_name:
+                logger.warning(f"Name normalization resulted in empty string: '{speaker_name}'")
+                return None
+            
+            logger.info(f"Creating new profile for speaker: '{speaker_name}' (normalized: '{normalized_name}')")
+            
+            # Prepare profile data
+            profile_data = {
+                "name": speaker_name.strip(),
+                "name_normalized": normalized_name
+            }
+            
+            # Insert new profile into Supabase
+            response = self.supabase.table("profiles").insert(profile_data).execute()
+            
+            if response.data:
+                new_profile = response.data[0]
+                logger.info(f"Successfully created profile: ID={new_profile['id']}, Name='{new_profile['name']}'")
+                return new_profile
+            else:
+                logger.error(f"Failed to create profile - no data returned for: '{speaker_name}'")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Failed to create profile for '{speaker_name}': {e}")
+            return None
+
+    def process_speaker_profile(self, speaker_name: str) -> Optional[str]:
+        """
+        Process speaker profile and return profile ID
+        This method uses the existing get_or_create_profile functionality
+        
+        Args:
+            speaker_name: Name of the speaker
+            
+        Returns:
+            Profile ID if successful, None otherwise
+        """
+        try:
+            if not speaker_name or not speaker_name.strip():
+                logger.warning("Empty speaker name provided to process_speaker_profile")
+                return None
+            
+            logger.debug(f"Processing speaker profile for: '{speaker_name}'")
+            
+            # Use the existing get_or_create_profile method
+            profile_id = self.get_or_create_profile(speaker_name)
+            
+            if profile_id:
+                logger.debug(f"Successfully processed speaker profile for '{speaker_name}': {profile_id}")
+            else:
+                logger.error(f"Failed to process speaker profile for '{speaker_name}'")
+            
+            return profile_id
+            
+        except Exception as e:
+            logger.error(f"Failed to process speaker profile for '{speaker_name}': {e}")
+            return None
 
 # Create service instance
 profile_service = ProfileService()

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 import logging
+import asyncio
 
 from models.transcription_models import (
     TranscriptionAnalysisInput,
@@ -61,28 +62,28 @@ async def analyze_for_fact_checking(request: AnalysisRequest) -> EnhancedTranscr
 @router.post("/research", response_model=EnhancedLLMResearchResponse)
 async def research_statement(request: ResearchRequestAPI) -> EnhancedLLMResearchResponse:
     """
-    Research a statement using the core fact-checking service.
-    
-    Args:
-        request: Research request containing the statement, source, context, datetime, etc.
-        
-    Returns:
-        EnhancedLLMResearchResponse: Complete fact-check result with request data
-        
-    Raises:
-        HTTPException: If research fails
+    Research a statement using the enhanced tri-factor fact-checking service.
     """
     try:
-        logger.info(f"Starting fact-check research for statement: {request.statement[:100]}...")
+        logger.info(f"Starting tri-factor research for statement: {request.statement[:100]}...")
+        logger.info(f"Research will include: LLM data + Web search + Resource analysis")
         
-        # Use core service for complete fact-checking pipeline
-        result = fact_checking_core_service.process_research_request(request)
+        # Execute the tri-factor research (FIXED: Direct await call)
+        result = await fact_checking_core_service.process_research_request(request)
         
-        logger.info("Fact-check research completed successfully")
+        # Log research completion with metadata
+        research_sources = []
+        if hasattr(result, 'research_metadata') and result.research_metadata:
+            research_sources = result.research_metadata.research_sources
+        
+        logger.info(f"Tri-factor research completed successfully")
+        logger.info(f"Research sources used: {', '.join(research_sources) if research_sources else 'LLM only'}")
+        logger.info(f"Final confidence score: {getattr(result, 'confidence_score', 'N/A')}")
+        
         return result
         
     except Exception as e:
-        error_msg = f"Failed to research statement: {str(e)}"
+        error_msg = f"Failed to research statement with tri-factor method: {str(e)}"
         logger.error(error_msg)
         raise HTTPException(status_code=400, detail=error_msg)
 
@@ -95,7 +96,7 @@ async def get_research_result(research_id: str):
         research_id: Database ID of the research result
         
     Returns:
-        Dict containing the research result data
+        Dict containing the research result data (may include tri-factor research data)
         
     Raises:
         HTTPException: If research result not found
@@ -109,7 +110,15 @@ async def get_research_result(research_id: str):
             logger.warning(f"Research result not found: {research_id}")
             raise HTTPException(status_code=404, detail="Research result not found")
         
+        # Add metadata about research method used
+        research_method = result.get('research_method', 'Unknown')
+        is_tri_factor = 'tri-factor' in research_method.lower() if research_method else False
+        
         logger.info(f"Successfully retrieved research result: {research_id}")
+        logger.info(f"Research method: {research_method}")
+        if is_tri_factor:
+            logger.info("Result includes tri-factor research data")
+        
         return result
         
     except HTTPException:
@@ -127,7 +136,8 @@ async def search_research_results(
     category: str = None,
     profile: str = None,
     limit: int = 50,
-    offset: int = 0
+    offset: int = 0,
+    tri_factor_only: bool = False  # New parameter to filter tri-factor results
 ):
     """
     Search research results with optional filters.
@@ -140,12 +150,15 @@ async def search_research_results(
         profile: Filter by profile ID
         limit: Maximum results to return
         offset: Number of results to skip
+        tri_factor_only: Only return results from tri-factor research
         
     Returns:
-        List of research results
+        List of research results with metadata about research methods used
     """
     try:
         logger.info(f"Searching research results with filters")
+        if tri_factor_only:
+            logger.info("Filtering for tri-factor research results only")
         
         results = fact_checking_core_service.search_research_results(
             search_text=search,
@@ -157,12 +170,38 @@ async def search_research_results(
             offset=offset
         )
         
-        logger.info(f"Found {len(results)} research results")
+        # Filter tri-factor results if requested
+        if tri_factor_only:
+            original_count = len(results)
+            results = [
+                r for r in results 
+                if r.get('research_method', '').lower().find('tri-factor') >= 0
+            ]
+            logger.info(f"Filtered {original_count} results to {len(results)} tri-factor results")
+        
+        # Add metadata about research methods
+        tri_factor_count = sum(
+            1 for r in results 
+            if r.get('research_method', '').lower().find('tri-factor') >= 0
+        )
+        
+        logger.info(f"Found {len(results)} research results ({tri_factor_count} tri-factor)")
+        
         return {
             "results": results,
             "count": len(results),
+            "tri_factor_count": tri_factor_count,
+            "legacy_count": len(results) - tri_factor_count,
             "limit": limit,
-            "offset": offset
+            "offset": offset,
+            "filters_applied": {
+                "search": search,
+                "status": status,
+                "country": country,
+                "category": category,
+                "profile": profile,
+                "tri_factor_only": tri_factor_only
+            }
         }
         
     except Exception as e:
@@ -186,5 +225,39 @@ async def get_available_categories():
 
 @router.get("/health")
 async def health_check():
-    """Health check endpoint for fact-checking service."""
-    return {"status": "healthy", "service": "fact-checking"}
+    """Health check endpoint for fact-checking service with tri-factor research status."""
+    try:
+        import os
+        
+        # FIXED: Use GEMINI_API_KEY instead of GOOGLE_API_KEY
+        gemini_available = bool(os.getenv('GOOGLE_API_KEY'))
+        firecrawl_available = bool(os.getenv('FIRECRAWL_API_KEY'))
+        
+        # Check if Firecrawl SDK is available
+        try:
+            import firecrawl
+            firecrawl_sdk_available = True
+        except ImportError:
+            firecrawl_sdk_available = False
+            firecrawl_available = False
+        
+        return {
+            "status": "healthy", 
+            "service": "fact-checking",
+            "research_capabilities": {
+                "llm_research": True,  # Always available
+                "web_search": gemini_available,
+                "resource_analysis": firecrawl_available,
+                "firecrawl_sdk": firecrawl_sdk_available,
+                "tri_factor_ready": gemini_available  # Minimum requirement
+            },
+            "version": "tri-factor-v1.1-sdk"
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {
+            "status": "degraded",
+            "service": "fact-checking", 
+            "error": str(e),
+            "version": "tri-factor-v1.1-sdk"
+        }
