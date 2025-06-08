@@ -1,26 +1,9 @@
 from pydantic import BaseModel, Field, validator
 from typing import Optional, List
 from datetime import datetime
-from enum import Enum
 import uuid
 from models.top_models.list import ListResponse
-
-class CategoryEnum(str, Enum):
-    sports = "sports"
-    entertainment = "entertainment"
-    technology = "technology"
-    business = "business"
-    other = "other"
-
-class AccoladeType(str, Enum):
-    AWARD = "award"
-    ACHIEVEMENT = "achievement"
-    RECORD = "record"
-
-class VoteValue(int, Enum):
-    DOWNVOTE = -1
-    UPVOTE = 1
-
+from models.top_models.enums import CategoryEnum, AccoladeType, VoteValue
 class AccoladeBase(BaseModel):
     type: AccoladeType
     name: str = Field(..., min_length=1, max_length=255)
@@ -69,6 +52,8 @@ class ItemBase(BaseModel):
 class ItemCreate(ItemBase):
     tags: Optional[List[str]] = []
     accolades: Optional[List[AccoladeBase]] = []
+    reference_url: Optional[str] = None
+    item_year_to: Optional[int] = None
 
 class ItemUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=255)
@@ -88,6 +73,7 @@ class ItemResponse(ItemBase):
     updated_at: datetime
     accolades: List[AccoladeResponse] = []
     tags: List[TagResponse] = []
+    
 
     class Config:
         from_attributes = True

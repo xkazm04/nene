@@ -3,10 +3,8 @@ from typing import Optional, List
 import uuid
 import logging
 
-from models.top import (
-    ListWithItems,
-    CategoryEnum
-)
+from models.top import (ListWithItems)
+from models.top_models.enums import CategoryEnum
 from models.top_models.list import ListCreate, ListUpdate, ListAnalyticsResponse, ListCreationResponse, ListResponse
 from services.top.top_lists import top_lists_service
 from utils.user_id_utils import extract_user_id_info

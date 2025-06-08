@@ -1,8 +1,9 @@
-import os
 import logging
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 import asyncio
+
+from services.web_research.firecrawl_base_service import firecrawl_base_service
 
 logger = logging.getLogger(__name__)
 
@@ -10,33 +11,16 @@ class FirecrawlService:
     """Service for analyzing resource quantity and quality using Firecrawl Search SDK"""
     
     def __init__(self):
-        self.api_key = os.getenv('FIRECRAWL_API_KEY')
-        self._service_available = True
-        
-        if not self.api_key:
-            logger.warning("FIRECRAWL_API_KEY not found - resource analysis will be unavailable")
-            self._service_available = False
-            self.app = None
-        else:
-            try:
-                from firecrawl import FirecrawlApp
-                self.app = FirecrawlApp(api_key=self.api_key)
-                logger.info("Firecrawl SDK initialized successfully")
-            except ImportError:
-                logger.error("Firecrawl SDK not installed. Install with: pip install firecrawl-py")
-                self._service_available = False
-                self.app = None
-            except Exception as e:
-                logger.error(f"Failed to initialize Firecrawl SDK: {e}")
-                self._service_available = False
-                self.app = None
+        self.base_service = firecrawl_base_service
+        self._service_available = self.base_service.is_available()
+        self.app = self.base_service.app if self._service_available else None
     
     async def analyze_statement_resources(self, statement: str) -> Dict[str, Any]:
         """
         Analyze resources using Firecrawl Search with fast-fail strategy
         """
         try:
-            if not self._service_available or not self.app:
+            if not self._service_available:
                 return self._create_fallback_analysis(statement, "Firecrawl SDK not available")
             
             logger.info(f"Starting Firecrawl search analysis for: {statement[:100]}...")
@@ -73,6 +57,7 @@ class FirecrawlService:
                         
                 except Exception as e:
                     logger.warning(f"Search strategy '{strategy['type']}' failed: {e}")
+                    
                     # Check if it's a server error
                     if any(indicator in str(e).lower() for indicator in ['server', '500', 'undefined']):
                         server_error_encountered = True
@@ -118,16 +103,11 @@ class FirecrawlService:
             logger.info(f"Performing Firecrawl search for strategy: {strategy['type']}")
             
             query = strategy['query']
+            search_result = await self.base_service.search(query, limit=10)
             
-            # Use Firecrawl's search functionality
-            search_result = await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: self.app.search(query, limit=10)
-            )
-            
-            # Process search results
-            if self._check_search_success(search_result):
-                results = self._extract_search_results(search_result, strategy)
+            if search_result.get('success', False):
+                # Process results for fact-checking analysis
+                results = self._process_results_for_fact_checking(search_result['results'], strategy)
                 
                 return {
                     'strategy': strategy,
@@ -136,7 +116,10 @@ class FirecrawlService:
                     'search_method': 'firecrawl_search'
                 }
             else:
-                error_msg = self._extract_search_error(search_result)
+                error_msg = search_result.get('error', 'Unknown error')
+                logger.warning(f"Firecrawl search failed for strategy {strategy['type']}: {error_msg}")
+                
+                # Check for server errors
                 server_error = any(indicator in error_msg.lower() for indicator in [
                     'server', '500', 'undefined', 'internal error'
                 ])
@@ -165,72 +148,28 @@ class FirecrawlService:
                 'server_error': server_error
             }
     
-    def _check_search_success(self, search_result) -> bool:
-        """Check if Firecrawl search was successful"""
-        try:
-            if not search_result:
-                return False
-            
-            # Check success attribute
-            if hasattr(search_result, 'success'):
-                return bool(search_result.success)
-            
-            # Check if we have data
-            if hasattr(search_result, 'data') and search_result.data:
-                return True
-            
-            return False
-            
-        except Exception as e:
-            logger.warning(f"Failed to check search success: {e}")
-            return False
-    
-    def _extract_search_results(self, search_result, strategy: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Extract and process search results from Firecrawl response"""
-        try:
-            results = []
-            
-            if hasattr(search_result, 'data') and search_result.data:
-                for item in search_result.data[:10]:  # Limit to 10 items
-                    result_item = {
-                        'url': getattr(item, 'url', '') or getattr(item, 'sourceURL', ''),
-                        'title': getattr(item, 'title', ''),
-                        'summary': (getattr(item, 'description', '') or getattr(item, 'markdown', ''))[:300],
-                        'domain': self._extract_domain(getattr(item, 'url', '') or getattr(item, 'sourceURL', '')),
-                        'strategy_type': strategy['type'],
-                        'relevance_score': self._calculate_relevance(
-                            getattr(item, 'title', '') + ' ' + getattr(item, 'description', ''),
-                            strategy['query']
-                        )
-                    }
-                    results.append(result_item)
-            
-            return results
-            
-        except Exception as e:
-            logger.warning(f"Failed to extract search results: {e}")
-            return []
-    
-    def _extract_search_error(self, search_result) -> str:
-        """Extract error message from Firecrawl search response"""
-        try:
-            if not search_result:
-                return 'No response from Firecrawl'
-            
-            if hasattr(search_result, 'error') and search_result.error:
-                return str(search_result.error)
-            
-            if hasattr(search_result, 'success') and not search_result.success:
-                return 'Search was not successful (no error details provided)'
-            
-            return 'Unknown error occurred'
-            
-        except Exception as e:
-            logger.warning(f"Failed to extract error from search result: {e}")
-            return f'Error extraction failed: {str(e)}'
+    def _process_results_for_fact_checking(self, results: List[Dict[str, Any]], strategy: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Process search results specifically for fact-checking analysis"""
+        processed_results = []
+        
+        for result in results:
+            processed_result = {
+                'url': result.get('url', ''),
+                'title': result.get('title', ''),
+                'summary': result.get('summary', ''),
+                'domain': result.get('domain', ''),
+                'strategy_type': strategy['type'],
+                'relevance_score': self._calculate_relevance(
+                    result.get('title', '') + ' ' + result.get('description', ''),
+                    strategy['query']
+                )
+            }
+            processed_results.append(processed_result)
+        
+        return processed_results
     
     def _create_search_strategies(self, statement: str) -> List[Dict[str, Any]]:
-        """Create search strategies optimized for Firecrawl Search"""
+        """Create search strategies optimized for fact-checking"""
         return [
             {
                 'type': 'supporting',
@@ -349,48 +288,40 @@ class FirecrawlService:
         """Extract domain from URL"""
         try:
             from urllib.parse import urlparse
-            return urlparse(url).netloc if url else 'unknown'
+            parsed = urlparse(url)
+            return parsed.netloc
         except:
-            return 'unknown'
+            return ""
     
     def _calculate_relevance(self, text: str, query: str) -> float:
         """Calculate relevance score between text and query"""
         if not text or not query:
             return 0.0
         
-        query_words = set(query.lower().replace('"', '').split())
-        text_words = set(text.lower().split())
+        text_lower = text.lower()
+        query_lower = query.lower()
         
-        if not query_words:
-            return 0.0
+        # Simple keyword matching
+        query_words = query_lower.split()
+        matches = sum(1 for word in query_words if word in text_lower)
         
-        intersection = query_words.intersection(text_words)
-        return min(len(intersection) / len(query_words), 1.0)
+        return min(matches / len(query_words), 1.0) if query_words else 0.0
     
     def _calculate_resource_quality(self, url: str, title: str, summary: str, domain: str) -> int:
         """Calculate quality score for a resource (0-100)"""
-        score = 50  # Base score for Firecrawl search results
+        score = 50  # Base score
         
-        # Domain authority indicators
-        authoritative_domains = [
-            'edu', 'gov', 'org', 'wikipedia', 'britannica',
-            'reuters.com', 'bbc.com', 'npr.org', 'cnn.com', 'nature.com',
-            'science.org', 'pubmed.ncbi.nlm.nih.gov'
-        ]
-        
-        if any(auth_domain in domain for auth_domain in authoritative_domains):
-            score += 25
+        # Domain reputation
+        if any(trusted in domain.lower() for trusted in ['edu', 'gov', 'org']):
+            score += 20
+        elif any(reputable in domain.lower() for reputable in ['bbc', 'reuters', 'nature', 'science']):
+            score += 15
         
         # Content quality indicators
+        if len(title) > 10:
+            score += 10
         if len(summary) > 100:
-            score += 10
-        
-        if any(indicator in summary.lower() for indicator in ['study', 'research', 'analysis', 'peer reviewed']):
-            score += 10
-        
-        # Title quality
-        if len(title) > 20 and title:
-            score += 5
+            score += 15
         
         return min(score, 100)
     

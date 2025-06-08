@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["top-items"])
 
 # Enhanced Item routes
-@router.post("/items", response_model=ItemResponse)
+@router.post("/", response_model=ItemResponse)
 async def create_item(item: ItemCreate, user_id: Optional[uuid.UUID] = None):
     """Create a new item with accolades and tags"""
     try:
@@ -26,7 +26,7 @@ async def create_item(item: ItemCreate, user_id: Optional[uuid.UUID] = None):
         logger.error(f"Failed to create item: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.post("/items/bulk", response_model=List[ItemResponse])
+@router.post("/bulk", response_model=List[ItemResponse])
 async def create_items_bulk(bulk_request: BulkItemRequest):
     """Create multiple items at once"""
     try:
@@ -43,7 +43,7 @@ async def create_items_bulk(bulk_request: BulkItemRequest):
         logger.error(f"Failed to create items in bulk: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.get("/items", response_model=List[ItemResponse])
+@router.get("/", response_model=List[ItemResponse])
 async def search_items(
     category: Optional[CategoryEnum] = Query(None, description="Filter by category"),
     subcategory: Optional[str] = Query(None, description="Filter by subcategory"),
@@ -71,7 +71,7 @@ async def search_items(
         logger.error(f"Failed to search items: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/items/trending", response_model=List[TrendingItemResponse])
+@router.get("/trending", response_model=List[TrendingItemResponse])
 async def get_trending_items(
     category: Optional[CategoryEnum] = Query(None, description="Filter by category"),
     limit: int = Query(20, ge=1, le=50, description="Number of trending items to return")
@@ -83,7 +83,7 @@ async def get_trending_items(
         logger.error(f"Failed to get trending items: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/items/{item_id}", response_model=ItemResponse)
+@router.get("/{item_id}", response_model=ItemResponse)
 async def get_item(item_id: uuid.UUID, user_id: Optional[uuid.UUID] = Query(None)):
     """Get item by ID with view tracking"""
     try:
@@ -97,7 +97,7 @@ async def get_item(item_id: uuid.UUID, user_id: Optional[uuid.UUID] = Query(None
         logger.error(f"Failed to get item: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/items/{item_id}/statistics", response_model=ItemStatisticsResponse)
+@router.get("/{item_id}/statistics", response_model=ItemStatisticsResponse)
 async def get_item_statistics(item_id: uuid.UUID):
     """Get item performance statistics"""
     try:
@@ -111,7 +111,7 @@ async def get_item_statistics(item_id: uuid.UUID):
         logger.error(f"Failed to get item statistics: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.patch("/items/{item_id}", response_model=ItemResponse)
+@router.patch("/{item_id}", response_model=ItemResponse)
 async def update_item(item_id: uuid.UUID, item_data: ItemUpdate):
     """Update an item"""
     try:
@@ -125,7 +125,7 @@ async def update_item(item_id: uuid.UUID, item_data: ItemUpdate):
         logger.error(f"Failed to update item: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/items/{item_id}/image", response_model=ItemResponse)
+@router.post("/{item_id}/image", response_model=ItemResponse)
 async def add_item_image(item_id: uuid.UUID, image_data: ImageUploadRequest):
     """Add image to an item"""
     try:
@@ -140,7 +140,7 @@ async def add_item_image(item_id: uuid.UUID, image_data: ImageUploadRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 # Accolade routes
-@router.post("/items/{item_id}/accolades", response_model=AccoladeResponse)
+@router.post("/{item_id}/accolades", response_model=AccoladeResponse)
 async def add_accolade(item_id: uuid.UUID, accolade_data: dict):
     """Add accolade to an item"""
     try:
@@ -150,7 +150,7 @@ async def add_accolade(item_id: uuid.UUID, accolade_data: dict):
         logger.error(f"Failed to add accolade: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.get("/items/{item_id}/accolades", response_model=List[AccoladeResponse])
+@router.get("/{item_id}/accolades", response_model=List[AccoladeResponse])
 async def get_item_accolades(item_id: uuid.UUID):
     """Get all accolades for an item"""
     try:
@@ -192,7 +192,7 @@ async def get_all_tags():
         logger.error(f"Failed to get tags: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/items/{item_id}/tags")
+@router.post("/{item_id}/tags")
 async def add_tags_to_item(item_id: uuid.UUID, tag_names: List[str]):
     """Add tags to an item"""
     try:
@@ -259,7 +259,7 @@ async def rerank_list_items(list_id: uuid.UUID, rerank_data: RerankRequest, user
     
 # Add these routes to your existing top_items.py
 
-@router.get("/items/{item_id}/analytics", response_model=ItemAnalyticsResponse)
+@router.get("/{item_id}/analytics", response_model=ItemAnalyticsResponse)
 async def get_item_analytics(item_id: uuid.UUID):
     """Get comprehensive analytics for an item"""
     try:
@@ -273,7 +273,7 @@ async def get_item_analytics(item_id: uuid.UUID):
         logger.error(f"Failed to get item analytics: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/items/search/advanced", response_model=List[ItemResponse])
+@router.get("/search/advanced", response_model=List[ItemResponse])
 async def advanced_search_items(
     category: Optional[CategoryEnum] = Query(None),
     subcategory: Optional[str] = Query(None),
@@ -320,7 +320,7 @@ async def create_bulk_accolades(bulk_request: BulkAccoladeRequest):
         logger.error(f"Failed to create bulk accolades: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.get("/items/{item_id}/popularity", response_model=ItemPopularityResponse)
+@router.get("/{item_id}/popularity", response_model=ItemPopularityResponse)
 async def get_item_popularity_trends(item_id: uuid.UUID, days: int = Query(30, ge=1, le=365)):
     """Get item popularity trends"""
     try:
