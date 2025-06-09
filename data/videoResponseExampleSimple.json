@@ -1,0 +1,45 @@
+{
+  "video_url": "https://www.youtube.com/watch?v=example123",
+  "source": "youtube",
+  "title": "Sample Political Speech",
+  "verdict": null,
+  "duration_seconds": 1800,
+  "speaker_name": "John Politician",
+  "language_code": "en",
+  "processed_at": "2025-01-01T12:00:00Z",
+  "timestamps": [
+    {
+      "time_from_seconds": 120,
+      "time_to_seconds": 135,
+      "statement": "Our economy has grown by 15% in the last quarter",
+      "context": "Discussing economic performance during campaign rally",
+      "category": "economy",
+      "confidence_score": 0.85,
+      "research": {
+        "id": "abc-123-def",
+        "source": "John Politician",
+        "country": "us",
+        "valid_sources": "Found 8 sources, 3 agree, 5 disagree",
+        "verdict": "Economic growth was actually 3.2% last quarter, not 15%",
+        "status": "FALSE",
+        "correction": "The actual GDP growth was 3.2% quarterly, well below the claimed 15%",
+        "resources_agreed": {...},
+        "resources_disagreed": {...},
+        "experts": {...},
+        "processed_at": "2025-01-01T12:05:00Z"
+      }
+    },
+    {
+      "time_from_seconds": 240,
+      "time_to_seconds": 260,
+      "statement": "We have reduced unemployment to historic lows",
+      "context": "Campaign speech about job market",
+      "category": "economy",
+      "confidence_score": 0.92,
+      "research": null  // Not yet researched
+    }
+  ],
+  "total_statements": 2,
+  "researched_statements": 1,
+  "research_completion_rate": 50.0
+}

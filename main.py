@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routes import api_router
-from config.logging_config import setup_logging
+from config.logging_config import setup_logging, get_safe_logger
 
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
@@ -10,8 +10,11 @@ import redis.asyncio as redis
 import os
 from contextlib import asynccontextmanager
 
-# Initialize logging at the start of your application
-setup_logging(log_level="INFO", log_file="video_processing.log")
+setup_logging(
+    log_level=os.getenv("LOG_LEVEL", "INFO"),
+)
+
+logger = get_safe_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

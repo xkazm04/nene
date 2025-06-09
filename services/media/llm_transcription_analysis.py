@@ -285,6 +285,6 @@ class LLMTranscriptionAnalysisService:
             return StatementCategory(category_str)
         except ValueError:
             return None
-
+        
 # Create service instance
 llm_analysis_service = LLMTranscriptionAnalysisService()

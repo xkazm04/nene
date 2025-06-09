@@ -64,7 +64,8 @@ class FactCheckingCoreService:
             # Step 3: Perform base LLM research
             llm_result = self._perform_llm_research(request, profile_id)
             
-            # Step 4: Perform tri-factor research enhancement (FIXED: Added await)
+            # Step 4: Perform tri-factor research enhancement 
+            # IMPORTANT: Make sure this is properly awaited
             enhanced_llm_result = await self._perform_tri_factor_research(request, llm_result, processing_start_time)
             
             # Step 5: Create enhanced response with tri-factor data
@@ -72,6 +73,8 @@ class FactCheckingCoreService:
             
             # Step 6: Save to database (non-blocking)
             database_id = self._save_to_database(request, enhanced_llm_result, profile_id)
+            
+            # IMPORTANT: Set the database_id on the response
             enhanced_response.database_id = database_id
             
             # Add processing metadata
@@ -85,7 +88,34 @@ class FactCheckingCoreService:
         except Exception as e:
             error_msg = f"Failed to process tri-factor research request: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg)
+            logger.error(f"Error type: {type(e).__name__}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            
+            # Create a minimal error response instead of raising
+            try:
+                request_datetime_str = request.datetime.isoformat() if hasattr(request.datetime, 'isoformat') else str(request.datetime)
+                
+                error_response = EnhancedLLMResearchResponse(
+                    valid_sources="Error occurred during research",
+                    verdict=f"Research failed: {str(e)}",
+                    status="UNVERIFIABLE",
+                    research_method="Error Recovery",
+                    request_statement=request.statement,
+                    request_source=request.source,
+                    request_context=request.context,
+                    request_datetime=request_datetime_str,
+                    processed_at=datetime.utcnow().isoformat(),
+                    research_errors=[str(e)],
+                    fallback_reason="Processing error occurred"
+                )
+                
+                logger.info("Returning error response instead of raising exception")
+                return error_response
+                
+            except Exception as fallback_error:
+                logger.error(f"Failed to create error response: {fallback_error}")
+                raise Exception(error_msg)
     
     async def _perform_tri_factor_research(
         self, 
@@ -378,18 +408,50 @@ class FactCheckingCoreService:
                 profile_id=profile_id
             )
             
-            database_id = self.db_service.save_research_result(research_request, llm_result)
+            # Create the database record
+            db_record = {
+                'statement': request.statement,
+                'source': request.source,
+                'context': request.context,
+                'request_datetime': request.datetime,
+                'statement_date': request.statement_date,
+                'country': request.country,
+                'category': request.category,
+                'valid_sources': llm_result.valid_sources,
+                'verdict': llm_result.verdict,
+                'status': llm_result.status,
+                'correction': llm_result.correction,
+                'resources_agreed': llm_result.llm_findings,  # Map to new schema
+                'resources_disagreed': llm_result.web_findings,  # Map to new schema
+                'experts': llm_result.resource_findings,  # Map to new schema
+                'profile_id': profile_id
+            }
             
-            if database_id:
-                logger.info(f"Tri-factor research result saved successfully: {database_id}")
+            # Save to database using your database manager
+            query = """
+            INSERT INTO research_results (
+                statement, source, context, request_datetime, statement_date,
+                country, category, valid_sources, verdict, status, correction,
+                resources_agreed, resources_disagreed, experts, profile_id
+            ) VALUES (
+                %(statement)s, %(source)s, %(context)s, %(request_datetime)s, %(statement_date)s,
+                %(country)s, %(category)s, %(valid_sources)s, %(verdict)s, %(status)s, %(correction)s,
+                %(resources_agreed)s, %(resources_disagreed)s, %(experts)s, %(profile_id)s
+            ) RETURNING id
+            """
+            
+            result = self.db_manager.execute_query(query, db_record)
+            
+            if result:
+                database_id = str(result[0]['id'])
+                logger.info(f"Saved research result to database with ID: {database_id}")
+                return database_id
             else:
-                logger.warning("Failed to save tri-factor research result")
-            
-            return database_id
-            
-        except Exception as db_error:
-            logger.error(f"Failed to save tri-factor research result to database: {str(db_error)}")
-            logger.warning("Continuing despite database save failure")
+                logger.error("Failed to save research result to database")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error saving to database: {str(e)}")
             return None
     
     def _convert_existing_result_to_response(

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Query, HTTPException
 from fastapi_cache.decorator import cache
 from typing import List, Optional, Dict, Any
 from supabase import create_client, Client
-from models.video_models import Video, VideoWithTimestamps, VideoTimestamp
+from models.video_models import Video
 import logging
 import os
 
@@ -162,65 +162,7 @@ async def get_videos(
         logger.error(f"Error retrieving videos: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve videos: {str(e)}")
 
-@router.get("/{video_id}", response_model=VideoWithTimestamps)
-@cache(expire=600)  # Cache for 10 minutes
-async def get_video_with_timestamps(video_id: str):
-    """
-    Get a specific video with all its timestamps.
-    """
-    try:
-        # Get the video
-        video_result = supabase.table('videos').select('*').eq('id', video_id).execute()
-        
-        if not video_result.data:
-            raise HTTPException(status_code=404, detail="Video not found")
-        
-        video_data = video_result.data[0]
-        video = Video(
-            id=str(video_data['id']),
-            video_url=video_data['video_url'],
-            source=video_data['source'],
-            researched=video_data['researched'],
-            title=video_data.get('title'),
-            verdict=video_data.get('verdict'),
-            duration_seconds=video_data.get('duration_seconds'),
-            speaker_name=video_data.get('speaker_name'),
-            language_code=video_data.get('language_code'),
-            audio_extracted=video_data.get('audio_extracted', False),
-            transcribed=video_data.get('transcribed', False),
-            analyzed=video_data.get('analyzed', False),
-            created_at=video_data.get('created_at'),
-            updated_at=video_data.get('updated_at'),
-            processed_at=video_data.get('processed_at')
-        )
-        
-        # Get timestamps for this video
-        timestamps_result = supabase.table('video_timestamps').select('*').eq('video_id', video_id).order('time_from_seconds').execute()
-        
-        timestamps = []
-        if timestamps_result.data:
-            for ts_data in timestamps_result.data:
-                timestamp = VideoTimestamp(
-                    id=str(ts_data['id']),
-                    video_id=str(ts_data['video_id']),
-                    research_id=ts_data.get('research_id'),
-                    time_from_seconds=ts_data['time_from_seconds'],
-                    time_to_seconds=ts_data['time_to_seconds'],
-                    statement=ts_data['statement'],
-                    context=ts_data.get('context'),
-                    category=ts_data.get('category'),
-                    confidence_score=ts_data.get('confidence_score'),
-                    created_at=ts_data.get('created_at')
-                )
-                timestamps.append(timestamp)
-        
-        return VideoWithTimestamps(video=video, timestamps=timestamps)
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error retrieving video {video_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve video: {str(e)}")
+
 
 @router.get("/search/advanced")
 @cache(expire=300)
@@ -391,39 +333,3 @@ async def get_video_stats():
     except Exception as e:
         logger.error(f"Error getting video stats: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get statistics: {str(e)}")
-
-@router.get("/categories/available")
-@cache(expire=1800)  # Cache for 30 minutes
-async def get_available_categories():
-    """
-    Get all available categories from video timestamps.
-    """
-    try:
-        result = supabase.table('video_timestamps').select('category').execute()
-        
-        if not result.data:
-            return []
-        
-        # Get unique categories, excluding null values
-        categories = list(set([
-            row['category'] for row in result.data 
-            if row.get('category') is not None
-        ]))
-        
-        # Return sorted list with category counts
-        category_stats = {}
-        for row in result.data:
-            if row.get('category'):
-                category_stats[row['category']] = category_stats.get(row['category'], 0) + 1
-        
-        return [
-            {
-                "category": category,
-                "count": category_stats.get(category, 0)
-            }
-            for category in sorted(categories)
-        ]
-        
-    except Exception as e:
-        logger.error(f"Error getting available categories: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to get categories")

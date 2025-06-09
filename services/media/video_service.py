@@ -297,6 +297,82 @@ class VideoService:
             
             return False
 
+    def update_video_language_and_analysis(self, video_id: str, detected_language: str, analysis_summary: str = None):
+        """Update video with detected language and analysis results"""
+        try:
+            data = {
+                "language_code": detected_language,
+                "analyzed": True
+            }
+            
+            response = self.supabase.table("videos").update(data).eq("id", video_id).execute()
+            
+            if response.data:
+                logger.info(f"Updated video {video_id} with language: {detected_language}")
+                return response.data[0]
+            else:
+                logger.error(f"Failed to update video {video_id}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error updating video language: {str(e)}")
+            return None
+
+    def link_timestamp_to_research(self, video_id: str, statement_text: str, research_id: str):
+        """Link a video timestamp to its research result"""
+        try:
+            response = self.supabase.table("video_timestamps").update({
+                "research_id": research_id
+            }).eq("video_id", video_id).eq("statement", statement_text).execute()
+            
+            if response.data:
+                logger.info(f"Linked timestamp to research {research_id}")
+                return response.data[0] if response.data else None
+            else:
+                logger.warning(f"No timestamp found for statement: {statement_text[:50]}...")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error linking timestamp to research: {str(e)}")
+            return None
+
+    def create_video_timestamp_with_research(
+        self, 
+        video_id: str, 
+        statement_text: str, 
+        time_from: int, 
+        time_to: int,
+        category: str = None,
+        context: str = None,
+        confidence_score: float = None,
+        research_id: str = None
+    ):
+        """Create video timestamp with optional research link"""
+        try:
+            query = """
+            INSERT INTO video_timestamps (
+                video_id, statement, time_from_seconds, time_to_seconds,
+                category, context, confidence_score, research_id
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING *
+            """
+            
+            result = self.db_manager.execute_query(query, (
+                video_id, statement_text, time_from, time_to,
+                category, context, confidence_score, research_id
+            ))
+            
+            if result:
+                logger.info(f"Created timestamp with research link: {research_id}")
+                return result[0]
+            else:
+                logger.error("Failed to create timestamp")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error creating timestamp: {str(e)}")
+            return None
+
 # Add missing import
 import asyncio
 

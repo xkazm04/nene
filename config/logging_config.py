@@ -1,88 +1,133 @@
 import logging
-import logging.handlers
+import sys
 import os
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-def setup_logging(log_level: str = "INFO", log_file: str = "video_processing.log"):
-    """
-    Set up comprehensive logging configuration for the application.
-    
-    Args:
-        log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-        log_file: Name of the log file
-    """
+def setup_logging(log_level: str = "INFO", log_file: str = None):
+    """Setup logging configuration with proper Unicode support for Windows"""
     
     # Create logs directory if it doesn't exist
-    log_dir = Path("logs")
-    log_dir.mkdir(exist_ok=True)
-    log_file_path = log_dir / log_file
+    logs_dir = Path("logs")
+    logs_dir.mkdir(exist_ok=True)
     
-    # Set logging level
-    level = getattr(logging, log_level.upper(), logging.INFO)
+    # Set encoding based on platform
+    if sys.platform.startswith('win'):
+        # Force UTF-8 encoding on Windows
+        encoding = 'utf-8'
+        # Set console to UTF-8 if possible
+        try:
+            sys.stdout.reconfigure(encoding='utf-8')
+            sys.stderr.reconfigure(encoding='utf-8')
+        except AttributeError:
+            # For older Python versions, use environment variable
+            os.environ['PYTHONIOENCODING'] = 'utf-8'
+    else:
+        encoding = 'utf-8'
     
-    # Create formatters
-    detailed_formatter = logging.Formatter(
-        fmt='%(asctime)s | %(name)-25s | %(levelname)-8s | %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+    # Configure root logger
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper()),
+        format='%(asctime)s | %(levelname)-8s | %(message)s',
+        datefmt='%H:%M:%S',
+        handlers=[
+            # Console handler with UTF-8 encoding
+            logging.StreamHandler(sys.stdout),
+        ],
+        force=True
     )
     
-    simple_formatter = logging.Formatter(
-        fmt='%(asctime)s | %(levelname)-8s | %(message)s',
-        datefmt='%H:%M:%S'
-    )
+    # Add file handler if log_file is specified
+    if log_file:
+        file_handler = RotatingFileHandler(
+            log_file,
+            maxBytes=10*1024*1024,  # 10MB
+            backupCount=5,
+            encoding=encoding  # Explicit UTF-8 encoding
+        )
+        file_handler.setFormatter(
+            logging.Formatter(
+                '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
+        )
+        logging.getLogger().addHandler(file_handler)
     
-    # Get root logger
-    root_logger = logging.getLogger()
-    root_logger.setLevel(level)
-    
-    # Clear any existing handlers
-    root_logger.handlers.clear()
-    
-    # Console handler with colored output
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(level)
-    console_handler.setFormatter(simple_formatter)
-    
-    # File handler with rotation
-    file_handler = logging.handlers.RotatingFileHandler(
-        log_file_path, 
-        maxBytes=10*1024*1024,  # 10MB
-        backupCount=5
-    )
-    file_handler.setLevel(level)
-    file_handler.setFormatter(detailed_formatter)
-    
-    # Add handlers to root logger
-    root_logger.addHandler(console_handler)
-    root_logger.addHandler(file_handler)
-    
-    # Set specific logger levels for different modules
-    logging.getLogger("services.pipelines").setLevel(logging.INFO)
-    logging.getLogger("services.media").setLevel(logging.INFO)
-    logging.getLogger("services.sse_service").setLevel(logging.INFO)
-    logging.getLogger("routes.yt").setLevel(logging.INFO)
-    
-    # Reduce noise from third-party libraries
+    # Set specific logger levels
+    logging.getLogger("uvicorn").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
-    logging.getLogger("yt_dlp").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
     
-    # Log the configuration
-    logging.info("=" * 60)
-    logging.info("LOGGING CONFIGURATION INITIALIZED")
-    logging.info(f"   Log Level: {log_level}")
-    logging.info(f"   Log File: {log_file_path}")
-    logging.info(f"   Console Output: Enabled")
-    logging.info("=" * 60)
+    return logging.getLogger(__name__)
 
-def get_logger(name: str) -> logging.Logger:
-    """
-    Get a logger with the specified name.
+# Emoji-safe logging functions
+def safe_log_info(logger, message: str):
+    """Log info message with emoji fallback for Windows"""
+    try:
+        logger.info(message)
+    except UnicodeEncodeError:
+        # Remove emojis and log plain text
+        safe_message = remove_emojis(message)
+        logger.info(f"[INFO] {safe_message}")
+
+def safe_log_error(logger, message: str):
+    """Log error message with emoji fallback for Windows"""
+    try:
+        logger.error(message)
+    except UnicodeEncodeError:
+        # Remove emojis and log plain text
+        safe_message = remove_emojis(message)
+        logger.error(f"[ERROR] {safe_message}")
+
+def safe_log_warning(logger, message: str):
+    """Log warning message with emoji fallback for Windows"""
+    try:
+        logger.warning(message)
+    except UnicodeEncodeError:
+        # Remove emojis and log plain text
+        safe_message = remove_emojis(message)
+        logger.warning(f"[WARNING] {safe_message}")
+
+def remove_emojis(text: str) -> str:
+    """Remove emojis from text for safe logging"""
+    import re
+    # Remove emoji characters
+    emoji_pattern = re.compile(
+        "["
+        "\U0001F600-\U0001F64F"  # emoticons
+        "\U0001F300-\U0001F5FF"  # symbols & pictographs
+        "\U0001F680-\U0001F6FF"  # transport & map symbols
+        "\U0001F1E0-\U0001F1FF"  # flags (iOS)
+        "\U00002702-\U000027B0"
+        "\U000024C2-\U0001F251"
+        "]+", 
+        flags=re.UNICODE
+    )
+    return emoji_pattern.sub(r'', text).strip()
+
+# Create a safe logger class
+class SafeLogger:
+    """Logger wrapper that handles Unicode encoding issues"""
     
-    Args:
-        name: Logger name (usually __name__)
-        
-    Returns:
-        logging.Logger: Configured logger
-    """
-    return logging.getLogger(name)
+    def __init__(self, logger):
+        self.logger = logger
+    
+    def info(self, message: str):
+        safe_log_info(self.logger, message)
+    
+    def error(self, message: str):
+        safe_log_error(self.logger, message)
+    
+    def warning(self, message: str):
+        safe_log_warning(self.logger, message)
+    
+    def debug(self, message: str):
+        try:
+            self.logger.debug(message)
+        except UnicodeEncodeError:
+            safe_message = remove_emojis(message)
+            self.logger.debug(f"[DEBUG] {safe_message}")
+
+def get_safe_logger(name: str = __name__) -> SafeLogger:
+    """Get a Unicode-safe logger"""
+    return SafeLogger(logging.getLogger(name))

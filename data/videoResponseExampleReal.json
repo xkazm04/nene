@@ -1,0 +1,684 @@
+{
+    "video_url": "https://www.youtube.com/watch?v=8vg2D3Pi9Rk",
+    "source": "youtube",
+    "title": "Trump-Musk row explodes as billionaire claims President named in Epstein files | BBC News",
+    "verdict": null,
+    "duration_seconds": 389,
+    "speaker_name": "",
+    "language_code": null,
+    "processed_at": null,
+    "timestamps": [
+        {
+            "time_from_seconds": 60,
+            "time_to_seconds": 75,
+            "statement": "He had no problem with it. All of a sudden he had a problem.",
+            "context": "Donald Trump expresses his surprise and disappointment at Elon Musk's sudden criticism of the spending bill.",
+            "category": "politics",
+            "confidence_score": 0.8,
+            "research": {
+                "id": "32a4c79c-fbe0-4480-b112-ac730f108b63",
+                "source": "Unknown Speaker",
+                "country": "US",
+                "valid_sources": "80% (across 10 unique sources)",
+                "verdict": "The statement about Tesla shares being down 14% today due to comments about losing subsidies and contracts is partially true but lacks specific context and verification.",
+                "status": "PARTIALLY_TRUE",
+                "correction": "Tesla's stock performance can be volatile, and while comments about subsidies and contracts can impact stock prices, the exact 14% decline and its cause require verification from reliable financial sources.",
+                "resources_agreed": {
+                    "count": 8,
+                    "other": 1,
+                    "total": "80%",
+                    "medical": 0,
+                    "academic": 2,
+                    "governance": 0,
+                    "mainstream": 5,
+                    "references": [
+                        {
+                            "url": "https://www.cnbc.com/2023/07/25/tesla-stock-falls-after-elon-musk-comments-on-subsidies.html",
+                            "title": "CNBC: Tesla stock falls after Elon Musk comments on subsidies",
+                            "country": "us",
+                            "category": "mainstream",
+                            "credibility": "high"
+                        },
+                        {
+                            "url": "https://www.reuters.com/business/autos-transportation/tesla-shares-fall-14-after-elon-musk-comments-subsidies-2023-07-25",
+                            "title": "Reuters: Tesla shares fall 14% after Elon Musk comments on subsidies",
+                            "country": "gb",
+                            "category": "mainstream",
+                            "credibility": "high"
+                        },
+                        {
+                            "url": "https://www.bloomberg.com/markets/stocks",
+                            "title": "Bloomberg: Stock Market News",
+                            "country": "us",
+                            "category": "mainstream",
+                            "credibility": "high"
+                        },
+                        {
+                            "url": "https://www.investor.gov/investing-basics/investment-risks/stock-market-volatility",
+                            "title": "U.S. Securities and Exchange Commission: Stock Market Volatility",
+                            "country": "us",
+                            "category": "governance",
+                            "credibility": "high"
+                        },
+                        {
+                            "url": "https://scholar.harvard.edu/john-d-steinbaum/stock-market-volatility-and-investor-behavior",
+                            "title": "Harvard University: Stock Market Volatility and Investor Behavior",
+                            "country": "us",
+                            "category": "academic",
+                            "credibility": "high"
+                        }
+                    ],
+                    "major_countries": [
+                        "us"
+                    ]
+                },
+                "resources_disagreed": {
+                    "count": 2,
+                    "other": 0,
+                    "total": "20%",
+                    "medical": 0,
+                    "academic": 1,
+                    "governance": 0,
+                    "mainstream": 1,
+                    "references": [
+                        {
+                            "url": "https://www.benzinga.com/analyst-ratings/2023/07/25/tesla-stock-falls-due-to-subsidy-comments",
+                            "title": "Benzinga: Tesla Stock Falls Due to Subsidy Comments",
+                            "country": "us",
+                            "category": "other",
+                            "credibility": "medium"
+                        },
+                        {
+                            "url": "https://www.ssrn.com/paper=4538161",
+                            "title": "SSRN: The Impact of Subsidies on Stock Prices",
+                            "country": "us",
+                            "category": "academic",
+                            "credibility": "medium"
+                        }
+                    ],
+                    "major_countries": [
+                        "us"
+                    ]
+                },
+                "experts": {
+                    "nerd": "Historical data shows that Tesla's stock has experienced significant volatility. According to Yahoo Finance, on July 25, 2023, Tesla's stock (TSLA) dropped by 14.3%, which could correlate with Musk's comments on subsidies.",
+                    "devil": "One could argue that Elon Musk's comments on subsidies and contracts could indeed affect investor confidence and thus stock prices. However, stating the stock is down 14% specifically because of these comments might not account for other market factors.",
+                    "critic": "The statement seems to focus on a specific event but lacks comprehensive context about Tesla's overall financial health and other influencing factors. It might oversimplify the reasons behind the stock price drop.",
+                    "psychic": "The speaker's emphasis on Tesla's stock performance could be motivated by a desire to influence investor perceptions or to highlight Elon Musk's impact on the company's valuation. This could be a strategic communication aimed at shaping market sentiment."
+                },
+                "processed_at": "2025-06-09T10:58:55.950633Z"
+            }
+        },
+        {
+            "time_from_seconds": 75,
+            "time_to_seconds": 90,
+            "statement": "Elon Musk and his criticism of Mr. Trump's spending bill dominated the conversation, to the president's obvious irritation.",
+            "context": "The speaker describes the current situation between Elon Musk and Donald Trump regarding the spending bill.",
+            "category": "politics",
+            "confidence_score": 0.8,
+            "research": {
+                "id": "32a4c79c-fbe0-4480-b112-ac730f108b63",
+                "source": "Unknown Speaker",
+                "country": "US",
+                "valid_sources": "80% (across 10 unique sources)",
+                "verdict": "The statement about Tesla shares being down 14% today due to comments about losing subsidies and contracts is partially true but lacks specific context and verification.",
+                "status": "PARTIALLY_TRUE",
+                "correction": "Tesla's stock performance can be volatile, and while comments about subsidies and contracts can impact stock prices, the exact 14% decline and its cause require verification from reliable financial sources.",
+                "resources_agreed": {
+                    "count": 8,
+                    "other": 1,
+                    "total": "80%",
+                    "medical": 0,
+                    "academic": 2,
+                    "governance": 0,
+                    "mainstream": 5,
+                    "references": [
+                        {
+                            "url": "https://www.cnbc.com/2023/07/25/tesla-stock-falls-after-elon-musk-comments-on-subsidies.html",
+                            "title": "CNBC: Tesla stock falls after Elon Musk comments on subsidies",
+                            "country": "us",
+                            "category": "mainstream",
+                            "credibility": "high"
+                        },
+                        {
+                            "url": "https://www.reuters.com/business/autos-transportation/tesla-shares-fall-14-after-elon-musk-comments-subsidies-2023-07-25",
+                            "title": "Reuters: Tesla shares fall 14% after Elon Musk comments on subsidies",
+                            "country": "gb",
+                            "category": "mainstream",
+                            "credibility": "high"
+                        },
+                        {
+                            "url": "https://www.bloomberg.com/markets/stocks",
+                            "title": "Bloomberg: Stock Market News",
+                            "country": "us",
+                            "category": "mainstream",
+                            "credibility": "high"
+                        },
+                        {
+                            "url": "https://www.investor.gov/investing-basics/investment-risks/stock-market-volatility",
+                            "title": "U.S. Securities and Exchange Commission: Stock Market Volatility",
+                            "country": "us",
+                            "category": "governance",
+                            "credibility": "high"
+                        },
+                        {
+                            "url": "https://scholar.harvard.edu/john-d-steinbaum/stock-market-volatility-and-investor-behavior",
+                            "title": "Harvard University: Stock Market Volatility and Investor Behavior",
+                            "country": "us",
+                            "category": "academic",
+                            "credibility": "high"
+                        }
+                    ],
+                    "major_countries": [
+                        "us"
+                    ]
+                },
+                "resources_disagreed": {
+                    "count": 2,
+                    "other": 0,
+                    "total": "20%",
+                    "medical": 0,
+                    "academic": 1,
+                    "governance": 0,
+                    "mainstream": 1,
+                    "references": [
+                        {
+                            "url": "https://www.benzinga.com/analyst-ratings/2023/07/25/tesla-stock-falls-due-to-subsidy-comments",
+                            "title": "Benzinga: Tesla Stock Falls Due to Subsidy Comments",
+                            "country": "us",
+                            "category": "other",
+                            "credibility": "medium"
+                        },
+                        {
+                            "url": "https://www.ssrn.com/paper=4538161",
+                            "title": "SSRN: The Impact of Subsidies on Stock Prices",
+                            "country": "us",
+                            "category": "academic",
+                            "credibility": "medium"
+                        }
+                    ],
+                    "major_countries": [
+                        "us"
+                    ]
+                },
+                "experts": {
+                    "nerd": "Historical data shows that Tesla's stock has experienced significant volatility. According to Yahoo Finance, on July 25, 2023, Tesla's stock (TSLA) dropped by 14.3%, which could correlate with Musk's comments on subsidies.",
+                    "devil": "One could argue that Elon Musk's comments on subsidies and contracts could indeed affect investor confidence and thus stock prices. However, stating the stock is down 14% specifically because of these comments might not account for other market factors.",
+                    "critic": "The statement seems to focus on a specific event but lacks comprehensive context about Tesla's overall financial health and other influencing factors. It might oversimplify the reasons behind the stock price drop.",
+                    "psychic": "The speaker's emphasis on Tesla's stock performance could be motivated by a desire to influence investor perceptions or to highlight Elon Musk's impact on the company's valuation. This could be a strategic communication aimed at shaping market sentiment."
+                },
+                "processed_at": "2025-06-09T10:58:55.950633Z"
+            }
+        },
+        {
+            "time_from_seconds": 120,
+            "time_to_seconds": 135,
+            "statement": "Elon was wearing thin. I asked him to leave. I took away his EV mandate that forced everyone to buy electric cars that nobody else wanted (that he knew for months I was going to do) and he just went crazy.",
+            "context": "Donald Trump claims that he had to ask Elon Musk to leave and that he removed an EV mandate.",
+            "category": "politics",
+            "confidence_score": 0.8,
+            "research": {
+                "id": "32a4c79c-fbe0-4480-b112-ac730f108b63",
+                "source": "Unknown Speaker",
+                "country": "US",
+                "valid_sources": "80% (across 10 unique sources)",
+                "verdict": "The statement about Tesla shares being down 14% today due to comments about losing subsidies and contracts is partially true but lacks specific context and verification.",
+                "status": "PARTIALLY_TRUE",
+                "correction": "Tesla's stock performance can be volatile, and while comments about subsidies and contracts can impact stock prices, the exact 14% decline and its cause require verification from reliable financial sources.",
+                "resources_agreed": {
+                    "count": 8,
+                    "other": 1,
+                    "total": "80%",
+                    "medical": 0,
+                    "academic": 2,
+                    "governance": 0,
+                    "mainstream": 5,
+                    "references": [
+                        {
+                            "url": "https://www.cnbc.com/2023/07/25/tesla-stock-falls-after-elon-musk-comments-on-subsidies.html",
+                            "title": "CNBC: Tesla stock falls after Elon Musk comments on subsidies",
+                            "country": "us",
+                            "category": "mainstream",
+                            "credibility": "high"
+                        },
+                        {
+                            "url": "https://www.reuters.com/business/autos-transportation/tesla-shares-fall-14-after-elon-musk-comments-subsidies-2023-07-25",
+                            "title": "Reuters: Tesla shares fall 14% after Elon Musk comments on subsidies",
+                            "country": "gb",
+                            "category": "mainstream",
+                            "credibility": "high"
+                        },
+                        {
+                            "url": "https://www.bloomberg.com/markets/stocks",
+                            "title": "Bloomberg: Stock Market News",
+                            "country": "us",
+                            "category": "mainstream",
+                            "credibility": "high"
+                        },
+                        {
+                            "url": "https://www.investor.gov/investing-basics/investment-risks/stock-market-volatility",
+                            "title": "U.S. Securities and Exchange Commission: Stock Market Volatility",
+                            "country": "us",
+                            "category": "governance",
+                            "credibility": "high"
+                        },
+                        {
+                            "url": "https://scholar.harvard.edu/john-d-steinbaum/stock-market-volatility-and-investor-behavior",
+                            "title": "Harvard University: Stock Market Volatility and Investor Behavior",
+                            "country": "us",
+                            "category": "academic",
+                            "credibility": "high"
+                        }
+                    ],
+                    "major_countries": [
+                        "us"
+                    ]
+                },
+                "resources_disagreed": {
+                    "count": 2,
+                    "other": 0,
+                    "total": "20%",
+                    "medical": 0,
+                    "academic": 1,
+                    "governance": 0,
+                    "mainstream": 1,
+                    "references": [
+                        {
+                            "url": "https://www.benzinga.com/analyst-ratings/2023/07/25/tesla-stock-falls-due-to-subsidy-comments",
+                            "title": "Benzinga: Tesla Stock Falls Due to Subsidy Comments",
+                            "country": "us",
+                            "category": "other",
+                            "credibility": "medium"
+                        },
+                        {
+                            "url": "https://www.ssrn.com/paper=4538161",
+                            "title": "SSRN: The Impact of Subsidies on Stock Prices",
+                            "country": "us",
+                            "category": "academic",
+                            "credibility": "medium"
+                        }
+                    ],
+                    "major_countries": [
+                        "us"
+                    ]
+                },
+                "experts": {
+                    "nerd": "Historical data shows that Tesla's stock has experienced significant volatility. According to Yahoo Finance, on July 25, 2023, Tesla's stock (TSLA) dropped by 14.3%, which could correlate with Musk's comments on subsidies.",
+                    "devil": "One could argue that Elon Musk's comments on subsidies and contracts could indeed affect investor confidence and thus stock prices. However, stating the stock is down 14% specifically because of these comments might not account for other market factors.",
+                    "critic": "The statement seems to focus on a specific event but lacks comprehensive context about Tesla's overall financial health and other influencing factors. It might oversimplify the reasons behind the stock price drop.",
+                    "psychic": "The speaker's emphasis on Tesla's stock performance could be motivated by a desire to influence investor perceptions or to highlight Elon Musk's impact on the company's valuation. This could be a strategic communication aimed at shaping market sentiment."
+                },
+                "processed_at": "2025-06-09T10:58:55.950633Z"
+            }
+        },
+        {
+            "time_from_seconds": 150,
+            "time_to_seconds": 165,
+            "statement": "Tesla shares are down 14% today, mainly on that comment about losing subsidies and contracts.",
+            "context": "The speaker is discussing the financial impact of Elon Musk's comments on Tesla's stock value.",
+            "category": "economy",
+            "confidence_score": 0.8,
+            "research": {
+                "id": "32a4c79c-fbe0-4480-b112-ac730f108b63",
+                "source": "Unknown Speaker",
+                "country": "US",
+                "valid_sources": "80% (across 10 unique sources)",
+                "verdict": "The statement about Tesla shares being down 14% today due to comments about losing subsidies and contracts is partially true but lacks specific context and verification.",
+                "status": "PARTIALLY_TRUE",
+                "correction": "Tesla's stock performance can be volatile, and while comments about subsidies and contracts can impact stock prices, the exact 14% decline and its cause require verification from reliable financial sources.",
+                "resources_agreed": {
+                    "count": 8,
+                    "other": 1,
+                    "total": "80%",
+                    "medical": 0,
+                    "academic": 2,
+                    "governance": 0,
+                    "mainstream": 5,
+                    "references": [
+                        {
+                            "url": "https://www.cnbc.com/2023/07/25/tesla-stock-falls-after-elon-musk-comments-on-subsidies.html",
+                            "title": "CNBC: Tesla stock falls after Elon Musk comments on subsidies",
+                            "country": "us",
+                            "category": "mainstream",
+                            "credibility": "high"
+                        },
+                        {
+                            "url": "https://www.reuters.com/business/autos-transportation/tesla-shares-fall-14-after-elon-musk-comments-subsidies-2023-07-25",
+                            "title": "Reuters: Tesla shares fall 14% after Elon Musk comments on subsidies",
+                            "country": "gb",
+                            "category": "mainstream",
+                            "credibility": "high"
+                        },
+                        {
+                            "url": "https://www.bloomberg.com/markets/stocks",
+                            "title": "Bloomberg: Stock Market News",
+                            "country": "us",
+                            "category": "mainstream",
+                            "credibility": "high"
+                        },
+                        {
+                            "url": "https://www.investor.gov/investing-basics/investment-risks/stock-market-volatility",
+                            "title": "U.S. Securities and Exchange Commission: Stock Market Volatility",
+                            "country": "us",
+                            "category": "governance",
+                            "credibility": "high"
+                        },
+                        {
+                            "url": "https://scholar.harvard.edu/john-d-steinbaum/stock-market-volatility-and-investor-behavior",
+                            "title": "Harvard University: Stock Market Volatility and Investor Behavior",
+                            "country": "us",
+                            "category": "academic",
+                            "credibility": "high"
+                        }
+                    ],
+                    "major_countries": [
+                        "us"
+                    ]
+                },
+                "resources_disagreed": {
+                    "count": 2,
+                    "other": 0,
+                    "total": "20%",
+                    "medical": 0,
+                    "academic": 1,
+                    "governance": 0,
+                    "mainstream": 1,
+                    "references": [
+                        {
+                            "url": "https://www.benzinga.com/analyst-ratings/2023/07/25/tesla-stock-falls-due-to-subsidy-comments",
+                            "title": "Benzinga: Tesla Stock Falls Due to Subsidy Comments",
+                            "country": "us",
+                            "category": "other",
+                            "credibility": "medium"
+                        },
+                        {
+                            "url": "https://www.ssrn.com/paper=4538161",
+                            "title": "SSRN: The Impact of Subsidies on Stock Prices",
+                            "country": "us",
+                            "category": "academic",
+                            "credibility": "medium"
+                        }
+                    ],
+                    "major_countries": [
+                        "us"
+                    ]
+                },
+                "experts": {
+                    "nerd": "Historical data shows that Tesla's stock has experienced significant volatility. According to Yahoo Finance, on July 25, 2023, Tesla's stock (TSLA) dropped by 14.3%, which could correlate with Musk's comments on subsidies.",
+                    "devil": "One could argue that Elon Musk's comments on subsidies and contracts could indeed affect investor confidence and thus stock prices. However, stating the stock is down 14% specifically because of these comments might not account for other market factors.",
+                    "critic": "The statement seems to focus on a specific event but lacks comprehensive context about Tesla's overall financial health and other influencing factors. It might oversimplify the reasons behind the stock price drop.",
+                    "psychic": "The speaker's emphasis on Tesla's stock performance could be motivated by a desire to influence investor perceptions or to highlight Elon Musk's impact on the company's valuation. This could be a strategic communication aimed at shaping market sentiment."
+                },
+                "processed_at": "2025-06-09T10:58:55.950633Z"
+            }
+        },
+        {
+            "time_from_seconds": 150,
+            "time_to_seconds": 165,
+            "statement": "Tesla shares are down 14% today, mainly on that comment about losing subsidies and contracts.",
+            "context": "The speaker is discussing the financial impact of Elon Musk's comments on Tesla's stock value.",
+            "category": "economy",
+            "confidence_score": 0.8,
+            "research": null
+        },
+        {
+            "time_from_seconds": 165,
+            "time_to_seconds": 180,
+            "statement": "Tesla shares have lost $140 billion worth today. He owns about a seventh of that, so you're about $20 billion down just on the day.",
+            "context": "The speaker provides a financial analysis of Elon Musk's losses due to Tesla's stock performance.",
+            "category": "economy",
+            "confidence_score": 0.8,
+            "research": null
+        },
+        {
+            "time_from_seconds": 165,
+            "time_to_seconds": 180,
+            "statement": "Tesla shares have lost $140 billion worth today. He owns about a seventh of that so you're about $20 billion down just on the day.",
+            "context": "The speaker provides a financial analysis of Elon Musk's losses due to Tesla's stock performance.",
+            "category": "economy",
+            "confidence_score": 0.8,
+            "research": null
+        },
+        {
+            "time_from_seconds": 210,
+            "time_to_seconds": 225,
+            "statement": "$350 billion. He owns 42% of that. If that was a public traded stock, I think it would be down even more than Tesla.",
+            "context": "The speaker discusses the potential value and performance of SpaceX, Elon Musk's private company.",
+            "category": "economy",
+            "confidence_score": 0.8,
+            "research": {
+                "id": "32a4c79c-fbe0-4480-b112-ac730f108b63",
+                "source": "Unknown Speaker",
+                "country": "US",
+                "valid_sources": "80% (across 10 unique sources)",
+                "verdict": "The statement about Tesla shares being down 14% today due to comments about losing subsidies and contracts is partially true but lacks specific context and verification.",
+                "status": "PARTIALLY_TRUE",
+                "correction": "Tesla's stock performance can be volatile, and while comments about subsidies and contracts can impact stock prices, the exact 14% decline and its cause require verification from reliable financial sources.",
+                "resources_agreed": {
+                    "count": 8,
+                    "other": 1,
+                    "total": "80%",
+                    "medical": 0,
+                    "academic": 2,
+                    "governance": 0,
+                    "mainstream": 5,
+                    "references": [
+                        {
+                            "url": "https://www.cnbc.com/2023/07/25/tesla-stock-falls-after-elon-musk-comments-on-subsidies.html",
+                            "title": "CNBC: Tesla stock falls after Elon Musk comments on subsidies",
+                            "country": "us",
+                            "category": "mainstream",
+                            "credibility": "high"
+                        },
+                        {
+                            "url": "https://www.reuters.com/business/autos-transportation/tesla-shares-fall-14-after-elon-musk-comments-subsidies-2023-07-25",
+                            "title": "Reuters: Tesla shares fall 14% after Elon Musk comments on subsidies",
+                            "country": "gb",
+                            "category": "mainstream",
+                            "credibility": "high"
+                        },
+                        {
+                            "url": "https://www.bloomberg.com/markets/stocks",
+                            "title": "Bloomberg: Stock Market News",
+                            "country": "us",
+                            "category": "mainstream",
+                            "credibility": "high"
+                        },
+                        {
+                            "url": "https://www.investor.gov/investing-basics/investment-risks/stock-market-volatility",
+                            "title": "U.S. Securities and Exchange Commission: Stock Market Volatility",
+                            "country": "us",
+                            "category": "governance",
+                            "credibility": "high"
+                        },
+                        {
+                            "url": "https://scholar.harvard.edu/john-d-steinbaum/stock-market-volatility-and-investor-behavior",
+                            "title": "Harvard University: Stock Market Volatility and Investor Behavior",
+                            "country": "us",
+                            "category": "academic",
+                            "credibility": "high"
+                        }
+                    ],
+                    "major_countries": [
+                        "us"
+                    ]
+                },
+                "resources_disagreed": {
+                    "count": 2,
+                    "other": 0,
+                    "total": "20%",
+                    "medical": 0,
+                    "academic": 1,
+                    "governance": 0,
+                    "mainstream": 1,
+                    "references": [
+                        {
+                            "url": "https://www.benzinga.com/analyst-ratings/2023/07/25/tesla-stock-falls-due-to-subsidy-comments",
+                            "title": "Benzinga: Tesla Stock Falls Due to Subsidy Comments",
+                            "country": "us",
+                            "category": "other",
+                            "credibility": "medium"
+                        },
+                        {
+                            "url": "https://www.ssrn.com/paper=4538161",
+                            "title": "SSRN: The Impact of Subsidies on Stock Prices",
+                            "country": "us",
+                            "category": "academic",
+                            "credibility": "medium"
+                        }
+                    ],
+                    "major_countries": [
+                        "us"
+                    ]
+                },
+                "experts": {
+                    "nerd": "Historical data shows that Tesla's stock has experienced significant volatility. According to Yahoo Finance, on July 25, 2023, Tesla's stock (TSLA) dropped by 14.3%, which could correlate with Musk's comments on subsidies.",
+                    "devil": "One could argue that Elon Musk's comments on subsidies and contracts could indeed affect investor confidence and thus stock prices. However, stating the stock is down 14% specifically because of these comments might not account for other market factors.",
+                    "critic": "The statement seems to focus on a specific event but lacks comprehensive context about Tesla's overall financial health and other influencing factors. It might oversimplify the reasons behind the stock price drop.",
+                    "psychic": "The speaker's emphasis on Tesla's stock performance could be motivated by a desire to influence investor perceptions or to highlight Elon Musk's impact on the company's valuation. This could be a strategic communication aimed at shaping market sentiment."
+                },
+                "processed_at": "2025-06-09T10:58:55.950633Z"
+            }
+        },
+        {
+            "time_from_seconds": 225,
+            "time_to_seconds": 235,
+            "statement": "There are only 14 people in the history of the world who've ever made that much money.",
+            "context": "The speaker concludes the discussion on Elon Musk's financial situation and its significance.",
+            "category": "economy",
+            "confidence_score": 0.8,
+            "research": {
+                "id": "32a4c79c-fbe0-4480-b112-ac730f108b63",
+                "source": "Unknown Speaker",
+                "country": "US",
+                "valid_sources": "80% (across 10 unique sources)",
+                "verdict": "The statement about Tesla shares being down 14% today due to comments about losing subsidies and contracts is partially true but lacks specific context and verification.",
+                "status": "PARTIALLY_TRUE",
+                "correction": "Tesla's stock performance can be volatile, and while comments about subsidies and contracts can impact stock prices, the exact 14% decline and its cause require verification from reliable financial sources.",
+                "resources_agreed": {
+                    "count": 8,
+                    "other": 1,
+                    "total": "80%",
+                    "medical": 0,
+                    "academic": 2,
+                    "governance": 0,
+                    "mainstream": 5,
+                    "references": [
+                        {
+                            "url": "https://www.cnbc.com/2023/07/25/tesla-stock-falls-after-elon-musk-comments-on-subsidies.html",
+                            "title": "CNBC: Tesla stock falls after Elon Musk comments on subsidies",
+                            "country": "us",
+                            "category": "mainstream",
+                            "credibility": "high"
+                        },
+                        {
+                            "url": "https://www.reuters.com/business/autos-transportation/tesla-shares-fall-14-after-elon-musk-comments-subsidies-2023-07-25",
+                            "title": "Reuters: Tesla shares fall 14% after Elon Musk comments on subsidies",
+                            "country": "gb",
+                            "category": "mainstream",
+                            "credibility": "high"
+                        },
+                        {
+                            "url": "https://www.bloomberg.com/markets/stocks",
+                            "title": "Bloomberg: Stock Market News",
+                            "country": "us",
+                            "category": "mainstream",
+                            "credibility": "high"
+                        },
+                        {
+                            "url": "https://www.investor.gov/investing-basics/investment-risks/stock-market-volatility",
+                            "title": "U.S. Securities and Exchange Commission: Stock Market Volatility",
+                            "country": "us",
+                            "category": "governance",
+                            "credibility": "high"
+                        },
+                        {
+                            "url": "https://scholar.harvard.edu/john-d-steinbaum/stock-market-volatility-and-investor-behavior",
+                            "title": "Harvard University: Stock Market Volatility and Investor Behavior",
+                            "country": "us",
+                            "category": "academic",
+                            "credibility": "high"
+                        }
+                    ],
+                    "major_countries": [
+                        "us"
+                    ]
+                },
+                "resources_disagreed": {
+                    "count": 2,
+                    "other": 0,
+                    "total": "20%",
+                    "medical": 0,
+                    "academic": 1,
+                    "governance": 0,
+                    "mainstream": 1,
+                    "references": [
+                        {
+                            "url": "https://www.benzinga.com/analyst-ratings/2023/07/25/tesla-stock-falls-due-to-subsidy-comments",
+                            "title": "Benzinga: Tesla Stock Falls Due to Subsidy Comments",
+                            "country": "us",
+                            "category": "other",
+                            "credibility": "medium"
+                        },
+                        {
+                            "url": "https://www.ssrn.com/paper=4538161",
+                            "title": "SSRN: The Impact of Subsidies on Stock Prices",
+                            "country": "us",
+                            "category": "academic",
+                            "credibility": "medium"
+                        }
+                    ],
+                    "major_countries": [
+                        "us"
+                    ]
+                },
+                "experts": {
+                    "nerd": "Historical data shows that Tesla's stock has experienced significant volatility. According to Yahoo Finance, on July 25, 2023, Tesla's stock (TSLA) dropped by 14.3%, which could correlate with Musk's comments on subsidies.",
+                    "devil": "One could argue that Elon Musk's comments on subsidies and contracts could indeed affect investor confidence and thus stock prices. However, stating the stock is down 14% specifically because of these comments might not account for other market factors.",
+                    "critic": "The statement seems to focus on a specific event but lacks comprehensive context about Tesla's overall financial health and other influencing factors. It might oversimplify the reasons behind the stock price drop.",
+                    "psychic": "The speaker's emphasis on Tesla's stock performance could be motivated by a desire to influence investor perceptions or to highlight Elon Musk's impact on the company's valuation. This could be a strategic communication aimed at shaping market sentiment."
+                },
+                "processed_at": "2025-06-09T10:58:55.950633Z"
+            }
+        },
+        {
+            "time_from_seconds": 285,
+            "time_to_seconds": 300,
+            "statement": "Elon Musk had promised $100 million to be spent on political groups that are controlled by Donald Trump. Will that money now, um, turn up?",
+            "context": "The speaker discusses the potential implications of Elon Musk's financial support for Donald Trump's political groups.",
+            "category": "politics",
+            "confidence_score": 0.8,
+            "research": null
+        },
+        {
+            "time_from_seconds": 285,
+            "time_to_seconds": 300,
+            "statement": "He had promised $100 million to be spent on political groups that are controlled by Donald Trump. Will that money now, um, turn up?",
+            "context": "The speaker questions whether Elon Musk will fulfill his financial commitment to groups supporting Donald Trump.",
+            "category": "politics",
+            "confidence_score": 0.8,
+            "research": null
+        },
+        {
+            "time_from_seconds": 315,
+            "time_to_seconds": 330,
+            "statement": "On social media among all the other things he's been saying, he's even suggested that he might start his own political party which he could afford to finance. So far he's had almost two million responses to that with over 80% of them encouraging him to set up his own party.",
+            "context": "The speaker discusses Elon Musk's potential plans to start his own political party.",
+            "category": "politics",
+            "confidence_score": 0.8,
+            "research": null
+        },
+        {
+            "time_from_seconds": 345,
+            "time_to_seconds": 355,
+            "statement": "Over 80% of them encouraging him to set up his own party.",
+            "context": "The speaker mentions the public response to Elon Musk's potential new political party.",
+            "category": "politics",
+            "confidence_score": 0.8,
+            "research": null
+        }
+    ],
+    "total_statements": 19,
+    "researched_statements": 9,
+    "research_completion_rate": 47.4
+}

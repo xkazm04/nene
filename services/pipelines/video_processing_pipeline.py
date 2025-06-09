@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import traceback  
 from typing import Optional, List
 from datetime import datetime
 
@@ -133,6 +134,15 @@ async def process_video_pipeline(
                 frontend_mode=True,
                 job_id=job_id
             )
+            
+            if analysis_result.detected_language and video_id:
+                logger.info(f"Updating video with detected language: {analysis_result.detected_language}")
+                video_service.update_video_language_and_analysis(
+                    video_id=video_id,
+                    detected_language=analysis_result.detected_language,
+                    analysis_summary=getattr(analysis_result, 'analysis_summary', None)
+                )
+            
             logger.info(f"✅ Phase 3 COMPLETED")
             logger.info(f"   Found {len(analysis_result.statements)} fact-checkable statements")
             logger.info(f"   Detected language: {analysis_result.detected_language}")
@@ -259,13 +269,7 @@ async def research_statements_pipeline(
 ):
     """
     Research individual statements with SSE updates.
-    
-    Args:
-        job_id: Processing job ID
-        video_id: Video database ID
-        statements: List of statements to research
-        speaker_name: Speaker name
-        context: Context description
+    Enhanced to handle schema conversion properly.
     """
     try:
         logger.info(f"Starting statement research pipeline")
@@ -299,8 +303,23 @@ async def research_statements_pipeline(
         for i, statement in enumerate(statements, 1):
             try:
                 logger.info(f"📊 Researching statement {i}/{len(statements)}")
-                logger.info(f"   Statement: {statement.statement[:100]}...")
-                logger.info(f"   Category: {statement.category.value if statement.category else 'None'}")
+                
+                # Handle different statement formats
+                if hasattr(statement, 'statement'):
+                    statement_text = statement.statement
+                    statement_category = getattr(statement, 'category', None)
+                    statement_context = getattr(statement, 'context', context)
+                elif isinstance(statement, dict):
+                    statement_text = statement.get('statement', str(statement))
+                    statement_category = statement.get('category', None)
+                    statement_context = statement.get('context', context)
+                else:
+                    statement_text = str(statement)
+                    statement_category = None
+                    statement_context = context
+                
+                logger.info(f"   Statement: {statement_text[:100]}...")
+                logger.info(f"   Category: {statement_category}")
                 
                 # Send research start update
                 research_update = ProcessingUpdate(
@@ -309,62 +328,75 @@ async def research_statements_pipeline(
                     status=ProcessingStatus.RESEARCHING,
                     step=f"Researching statement {i}/{len(statements)}",
                     progress=99,
-                    message=f"Fact-checking: {statement.statement[:100]}...",
+                    message=f"Fact-checking: {statement_text[:100]}...",
                     data={
                         "current_statement": i,
                         "total_statements": len(statements),
-                        "statement_text": statement.statement,
-                        "statement_category": statement.category.value if statement.category else None
+                        "statement_text": statement_text,
+                        "statement_category": statement_category
                     },
                     timestamp=datetime.utcnow()
                 )
                 await sse_service.broadcast_update(job_id, research_update)
                 
-                # Create research request
+                # Create research request - FIXED: Use proper schema
                 research_request = ResearchRequestAPI(
-                    statement=statement.statement,
+                    statement=statement_text,
                     source=speaker_name or "Unknown Speaker",
-                    context=statement.context or context,
+                    context=statement_context,
                     datetime=datetime.utcnow(),
                     statement_date=None,
                     country="US",  # Default, could be configurable
-                    category=statement.category
+                    category=statement_category
                 )
                 
-                # Perform research
+                # Perform research - FIXED: Properly await the async call
                 logger.info(f"   Sending to fact-checking service...")
-                research_result = fact_checking_core_service.process_research_request(research_request)
+                research_result = await fact_checking_core_service.process_research_request(research_request)
                 
-                completed_count += 1
-                logger.info(f"   ✅ Research completed: {research_result.verdict}")
-                logger.info(f"   Status: {research_result.status}")
-                
-                # Update job progress
-                sse_service.update_job(job_id, statements_completed=completed_count)
-                
-                # Send research completion update
-                completion_update = ProcessingUpdate(
-                    job_id=job_id,
-                    video_id=video_id,
-                    status=ProcessingStatus.RESEARCHING,
-                    step=f"Statement {i}/{len(statements)} researched",
-                    progress=99,
-                    message=f"Research completed: {research_result.verdict}",
-                    data={
-                        "statement_index": i,
-                        "statement_text": statement.statement,
-                        "research_result": {
-                            "verdict": research_result.verdict,
-                            "status": research_result.status,
-                            "correction": research_result.correction,
-                            "database_id": research_result.database_id
+                if research_result:
+                    completed_count += 1
+                    logger.info(f"   ✅ Research completed: {research_result.verdict}")
+                    logger.info(f"   Status: {research_result.status}")
+                    
+                    # NEW: Link the research result back to the video timestamp
+                    if hasattr(research_result, 'database_id') and research_result.database_id:
+                        logger.info(f"   Linking research result {research_result.database_id} to timestamp")
+                        video_service.link_timestamp_to_research(
+                            video_id=video_id,
+                            statement_text=statement_text,
+                            research_id=research_result.database_id
+                        )
+                    
+                    # Update job progress
+                    sse_service.update_job(job_id, statements_completed=completed_count)
+                    
+                    # Send research completion update
+                    completion_update = ProcessingUpdate(
+                        job_id=job_id,
+                        video_id=video_id,
+                        status=ProcessingStatus.RESEARCHING,
+                        step=f"Statement {i}/{len(statements)} researched",
+                        progress=99,
+                        message=f"Research completed: {research_result.verdict}",
+                        data={
+                            "statement_index": i,
+                            "statement_text": statement_text,
+                            "research_result": {
+                                "verdict": research_result.verdict,
+                                "status": research_result.status,
+                                "correction": research_result.correction,
+                                "database_id": getattr(research_result, 'database_id', None)
+                            },
+                            "completed_count": completed_count,
+                            "total_statements": len(statements)
                         },
-                        "completed_count": completed_count,
-                        "total_statements": len(statements)
-                    },
-                    timestamp=datetime.utcnow()
-                )
-                await sse_service.broadcast_update(job_id, completion_update)
+                        timestamp=datetime.utcnow()
+                    )
+                    await sse_service.broadcast_update(job_id, completion_update)
+                else:
+                    failed_count += 1
+                    logger.error(f"   ❌ No result returned from fact-checking service")
                 
                 # Small delay to prevent overwhelming the API
                 await asyncio.sleep(1)
@@ -373,6 +405,8 @@ async def research_statements_pipeline(
                 failed_count += 1
                 logger.error(f"   ❌ Failed to research statement {i}: {str(stmt_error)}")
                 logger.error(f"   Error type: {type(stmt_error).__name__}")
+                import traceback
+                logger.error(f"   Traceback: {traceback.format_exc()}")
                 
                 # Send statement research error
                 error_update = ProcessingUpdate(
@@ -384,7 +418,7 @@ async def research_statements_pipeline(
                     message=f"Research failed for statement {i}",
                     data={
                         "statement_index": i,
-                        "statement_text": statement.statement,
+                        "statement_text": statement_text if 'statement_text' in locals() else "Unknown",
                         "error": str(stmt_error)
                     },
                     error=str(stmt_error),
@@ -397,9 +431,11 @@ async def research_statements_pipeline(
         logger.info(f"Statement research pipeline completed")
         logger.info(f"   ✅ Successfully researched: {completed_count}")
         logger.info(f"   ❌ Failed: {failed_count}")
-        logger.info(f"   📊 Success rate: {(completed_count / len(statements) * 100):.1f}%")
+        logger.info(f"   📊 Success rate: {(completed_count / len(statements) * 100):.1f}% if statements else 0")
         
     except Exception as e:
         logger.error(f"Statement research pipeline failed: {str(e)}")
         logger.error(f"Error type: {type(e).__name__}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise

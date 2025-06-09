@@ -8,6 +8,7 @@ from routes.top.top_items import router as top_item_router
 from routes.top.top_lists import router as top_list_router
 from routes.top.top_users import router as top_user_router
 from routes.top.top_item_research import router as item_research_router
+from routes.video import router as video_detail_router
 
 from fastapi import APIRouter
 
@@ -16,6 +17,7 @@ api_router = APIRouter()
 api_router.include_router(yt_router, prefix="/yt", tags=["youtube"])
 api_router.include_router(fc_router, prefix="/fc", tags=["fact-checking"])
 api_router.include_router(profile_router, prefix="/profile", tags=["profiles"])
+api_router.include_router(video_detail_router, prefix="/video", tags=["video-detail"])
 api_router.include_router(video_router, prefix="/videos", tags=["videos"])
 api_router.include_router(news_router, prefix="/news", tags=["news"])
 api_router.include_router(debug_router, prefix="/debug", tags=["debug"])
