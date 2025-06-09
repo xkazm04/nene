@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["profiles"])
 
-@router.post("/profiles", response_model=ProfileResponse)
+@router.post("/", response_model=ProfileResponse)
 async def create_profile(profile: ProfileCreate) -> ProfileResponse:
     """
     Create a new profile.
@@ -35,7 +35,7 @@ async def create_profile(profile: ProfileCreate) -> ProfileResponse:
         existing_id = profile_service.get_or_create_profile(profile.name)
         if existing_id:
             # Get the existing profile details
-            existing_profile = profile_service.get_profile_by_id(existing_id, include_statement_count=True)
+            existing_profile = profile_service.get_profile_by_id(existing_id)
             if existing_profile:
                 logger.info(f"Profile already exists: {profile.name} -> {existing_id}")
                 return existing_profile
@@ -50,7 +50,7 @@ async def create_profile(profile: ProfileCreate) -> ProfileResponse:
         logger.error(error_msg)
         raise HTTPException(status_code=400, detail=error_msg)
 
-@router.get("/profiles/{profile_id}", response_model=ProfileResponse)
+@router.get("/{profile_id}", response_model=ProfileResponse)
 async def get_profile(profile_id: str) -> ProfileResponse:
     """
     Get profile by ID with statement count.
@@ -67,7 +67,7 @@ async def get_profile(profile_id: str) -> ProfileResponse:
     try:
         logger.info(f"Retrieving profile: {profile_id}")
         
-        profile = profile_service.get_profile_by_id(profile_id, include_statement_count=True)
+        profile = profile_service.get_profile_by_id(profile_id)
         
         if not profile:
             logger.warning(f"Profile not found: {profile_id}")
@@ -83,7 +83,7 @@ async def get_profile(profile_id: str) -> ProfileResponse:
         logger.error(error_msg)
         raise HTTPException(status_code=500, detail=error_msg)
 
-@router.patch("/profiles/{profile_id}", response_model=ProfileResponse)
+@router.patch("/{profile_id}", response_model=ProfileResponse)
 async def update_profile(profile_id: str, updates: ProfileUpdate) -> ProfileResponse:
     """
     Update profile by ID.
@@ -117,7 +117,7 @@ async def update_profile(profile_id: str, updates: ProfileUpdate) -> ProfileResp
         logger.error(error_msg)
         raise HTTPException(status_code=400, detail=error_msg)
 
-@router.delete("/profiles/{profile_id}")
+@router.delete("/{profile_id}")
 async def delete_profile(profile_id: str):
     """
     Delete profile by ID.
@@ -150,7 +150,7 @@ async def delete_profile(profile_id: str):
         logger.error(error_msg)
         raise HTTPException(status_code=500, detail=error_msg)
 
-@router.get("/profiles", response_model=List[ProfileResponse])
+@router.get("/", response_model=List[ProfileResponse])
 async def search_profiles(
     search: Optional[str] = Query(None, description="Search text for names"),
     country: Optional[str] = Query(None, description="Filter by country code"),
@@ -180,7 +180,7 @@ async def search_profiles(
             search_text=search,
             country=country,
             party=party,
-            include_statement_counts=include_counts,
+            include_statement_counts=True,
             limit=limit,
             offset=offset
         )
@@ -193,7 +193,7 @@ async def search_profiles(
         logger.error(error_msg)
         raise HTTPException(status_code=500, detail=error_msg)
 
-@router.get("/profiles/{profile_id}/statements")
+@router.get("/{profile_id}/statements")
 async def get_profile_statements(
     profile_id: str,
     limit: int = Query(50, ge=1, le=100, description="Maximum results to return"),
@@ -214,7 +214,7 @@ async def get_profile_statements(
         logger.info(f"Getting statements for profile: {profile_id}")
         
         # Check if profile exists
-        profile = profile_service.get_profile_by_id(profile_id, include_statement_count=False)
+        profile = profile_service.get_profile_by_id(profile_id)
         if not profile:
             raise HTTPException(status_code=404, detail="Profile not found")
         
@@ -238,7 +238,7 @@ async def get_profile_statements(
         logger.error(error_msg)
         raise HTTPException(status_code=500, detail=error_msg)
 
-@router.get("/profiles/stats/summary")
+@router.get("/stats/summary")
 async def get_profile_stats():
     """
     Get profile statistics summary.
