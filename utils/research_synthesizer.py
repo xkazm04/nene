@@ -179,7 +179,7 @@ Resource Analysis Summary:
                     expert_name="Web Research Finding",
                     credentials="Online Source",
                     stance="SUPPORTING",
-                    reasoning=summary[:500],  # Limit length
+                    reasoning=summary[:100],  # Limit length
                     confidence_level=min(evidence.get('relevance_score', 0.5) * 100, 90),
                     source_type="web",
                     expertise_area="Web Research",
@@ -195,7 +195,7 @@ Resource Analysis Summary:
                     expert_name="Web Research Finding",
                     credentials="Online Source",
                     stance="OPPOSING",
-                    reasoning=summary[:500],
+                    reasoning=summary[:100],
                     confidence_level=min(evidence.get('relevance_score', 0.5) * 100, 90),
                     source_type="web",
                     expertise_area="Web Research",

@@ -1,11 +1,12 @@
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict
 import time
 
 from models.research_models import (
     LLMResearchRequest,
     ExpertOpinion,
+    ExpertPerspective
 )
 from schemas.research import (
     ResearchRequestAPI,
@@ -14,7 +15,8 @@ from schemas.research import (
 from services.llm_research.llm_research_legacy import llm_research_service
 from services.llm_research.db_research import db_research_service, ResearchRequest
 from services.profile import profile_service
-from services.web_research.research_orchestrator import ResearchOrchestrator
+from services.web_research.research_orchestrator import research_orchestrator
+from services.llm_clients.gemini_client import gemini_client
 
 logger = logging.getLogger(__name__)
 
@@ -23,25 +25,27 @@ class FactCheckingCoreService:
     Core service for fact-checking operations.
     Handles the complete fact-checking pipeline including profile management,
     duplicate detection, LLM research, and database storage.
-    Enhanced with tri-factor research capabilities.
+    Enhanced with web content extraction capabilities.
     """
     
     def __init__(self):
         self.llm_service = llm_research_service
         self.db_service = db_research_service
         self.profile_service = profile_service
-        self.research_orchestrator = ResearchOrchestrator()
-        logger.info("FactCheckingCoreService initialized with tri-factor research capabilities")
+        self.research_orchestrator = research_orchestrator
+        self.web_client = gemini_client  
+        
+        logger.info("FactCheckingCoreService initialized with web content extraction capabilities")
     
     async def process_research_request(self, request: ResearchRequestAPI) -> EnhancedLLMResearchResponse:
         """
-        Process a complete fact-checking research request using tri-factor research.
+        Process a complete fact-checking research request with web content extraction.
         
         Args:
             request: Research request containing statement, source, context, etc.
             
         Returns:
-            EnhancedLLMResearchResponse: Complete fact-check result with tri-factor research
+            EnhancedLLMResearchResponse: Complete fact-check result with web content
             
         Raises:
             Exception: If research processing fails
@@ -49,7 +53,7 @@ class FactCheckingCoreService:
         processing_start_time = time.time()
         
         try:
-            logger.info(f"Processing tri-factor research request for statement: {request.statement[:100]}...")
+            logger.info(f"Processing research request with web extraction for statement: {request.statement[:100]}...")
             logger.info(f"Source: {request.source}, Country: {request.country}, Category: {request.category}")
             
             # Step 1: Process speaker profile (non-blocking)
@@ -61,32 +65,34 @@ class FactCheckingCoreService:
                 logger.info("Returning existing duplicate result")
                 return duplicate_result
             
-            # Step 3: Perform base LLM research
-            llm_result = self._perform_llm_research(request, profile_id)
+            # Step 3: Extract web content first
+            web_context = await self._extract_web_content(request)
             
-            # Step 4: Perform tri-factor research enhancement 
-            # IMPORTANT: Make sure this is properly awaited
-            enhanced_llm_result = await self._perform_tri_factor_research(request, llm_result, processing_start_time)
+            # Step 4: Perform LLM research with web context
+            llm_result = self._perform_llm_research_with_web_context(request, profile_id, web_context)
             
-            # Step 5: Create enhanced response with tri-factor data
-            enhanced_response = self._create_enhanced_response(request, enhanced_llm_result, profile_id)
+            # Step 5: Perform focused research enhancement 
+            enhanced_llm_result = await self._perform_focused_research(request, llm_result, processing_start_time)
             
-            # Step 6: Save to database (non-blocking)
+            # Step 6: Create enhanced response with research data
+            enhanced_response = self._create_enhanced_response(request, enhanced_llm_result, profile_id, web_context)
+            
+            # Step 7: Save to database (non-blocking)
             database_id = self._save_to_database(request, enhanced_llm_result, profile_id)
             
-            # IMPORTANT: Set the database_id on the response
+            # Set the database_id on the response
             enhanced_response.database_id = database_id
             
             # Add processing metadata
             total_time = time.time() - processing_start_time
-            logger.info(f"Tri-factor research completed successfully in {total_time:.2f} seconds")
+            logger.info(f"Research completed successfully with web content in {total_time:.2f} seconds")
             if profile_id:
                 logger.info(f"Associated with profile: {profile_id}")
             
             return enhanced_response
             
         except Exception as e:
-            error_msg = f"Failed to process tri-factor research request: {str(e)}"
+            error_msg = f"Failed to process research request: {str(e)}"
             logger.error(error_msg)
             logger.error(f"Error type: {type(e).__name__}")
             import traceback
@@ -117,25 +123,204 @@ class FactCheckingCoreService:
                 logger.error(f"Failed to create error response: {fallback_error}")
                 raise Exception(error_msg)
     
-    async def _perform_tri_factor_research(
+    async def _extract_web_content(self, request: ResearchRequestAPI) -> str:
+        """
+        Extract web content - simplified version using working orchestrator
+        """
+        try:
+            if not hasattr(self, 'research_orchestrator'):
+                # Import here to avoid circular imports
+                from services.web_research.research_orchestrator import research_orchestrator
+                self.research_orchestrator = research_orchestrator
+            
+            logger.info("Extracting web content using simplified method...")
+            
+            # Convert to internal request
+            internal_request = LLMResearchRequest(
+                statement=request.statement,
+                source=request.source,
+                context=request.context,
+                datetime=request.datetime,
+                statement_date=request.statement_date,
+                country=request.country,
+                category=request.category,
+            )
+            
+            # Get web context
+            web_context = await self.research_orchestrator.get_enhanced_web_context_for_db(internal_request)
+            
+            logger.info(f"Web content extraction completed ({len(web_context)} characters)")
+            return web_context
+                
+        except Exception as e:
+            logger.error(f"Web content extraction failed: {e}")
+            return self._create_fallback_web_context(request.statement, f"Extraction error: {str(e)}")
+    
+    def _format_web_context_for_llm(self, extraction_result: Dict, request: ResearchRequestAPI) -> str:
+        """Format extracted web content for LLM consumption"""
+        
+        context_parts = [
+            f"=== WEB CONTENT ANALYSIS ===",
+            f"Statement: {request.statement}",
+            f"Category: {request.category or 'other'}",
+            f"Web sources processed: {extraction_result.get('function_calls_made', 0)}",
+            f"URLs analyzed: {len(extraction_result.get('urls_processed', []))}"
+        ]
+        
+        # Add structured analysis if available
+        structured_analysis = extraction_result.get('structured_analysis', {})
+        if structured_analysis:
+            context_parts.append(f"\n=== VERIFICATION STATUS ===")
+            context_parts.append(f"Status: {structured_analysis.get('verification_status', 'Unknown')}")
+            context_parts.append(f"Confidence: {structured_analysis.get('confidence_level', 0)}%")
+            context_parts.append(f"Source quality: {structured_analysis.get('web_sources_quality', 'Unknown')}")
+            
+            # Add key findings
+            key_findings = structured_analysis.get('key_findings', [])
+            if key_findings:
+                context_parts.append(f"\n=== KEY FINDINGS FROM WEB ===")
+                for i, finding in enumerate(key_findings[:5], 1):
+                    context_parts.append(f"{i}. {finding}")
+            
+            # Add supporting evidence
+            supporting = structured_analysis.get('supporting_evidence', [])
+            if supporting:
+                context_parts.append(f"\n=== SUPPORTING EVIDENCE ===")
+                for i, evidence in enumerate(supporting[:3], 1):
+                    context_parts.append(f"{i}. {evidence}")
+            
+            # Add contradicting evidence
+            contradicting = structured_analysis.get('contradicting_evidence', [])
+            if contradicting:
+                context_parts.append(f"\n=== CONTRADICTING EVIDENCE ===")
+                for i, evidence in enumerate(contradicting[:3], 1):
+                    context_parts.append(f"{i}. {evidence}")
+            
+            # Add fact-check summary
+            summary = structured_analysis.get('fact_check_summary', '')
+            if summary:
+                context_parts.append(f"\n=== WEB FACT-CHECK SUMMARY ===")
+                context_parts.append(summary)
+        
+        # Add URLs processed
+        urls_processed = extraction_result.get('urls_processed', [])
+        if urls_processed:
+            context_parts.append(f"\n=== SOURCES ANALYZED ===")
+            for i, url in enumerate(urls_processed[:5], 1):
+                context_parts.append(f"{i}. {url}")
+        
+        # Add content insights
+        web_content = extraction_result.get('web_content', [])
+        if web_content:
+            context_parts.append(f"\n=== CONTENT INSIGHTS ===")
+            for i, insight in enumerate(web_content[:3], 1):
+                content_text = insight.get('content', '')[:200]
+                context_parts.append(f"{i}. {content_text}...")
+        
+        # Add raw content summary (truncated)
+        content_summary = extraction_result.get('content_summary', '')
+        if content_summary and len(content_summary) > 100:
+            summary_excerpt = content_summary[:400] + "..." if len(content_summary) > 400 else content_summary
+            context_parts.append(f"\n=== RAW WEB CONTENT SUMMARY ===")
+            context_parts.append(summary_excerpt)
+        
+        return '\n'.join(context_parts)
+    
+    def _create_search_fallback_context(self, extraction_result: Dict, request: ResearchRequestAPI) -> str:
+        """Create context when search worked but content extraction failed"""
+        
+        context_parts = [
+            f"=== LIMITED WEB SEARCH RESULTS ===",
+            f"Statement: {request.statement}",
+            f"Search status: Completed with limited extraction",
+            f"URLs found: {len(extraction_result.get('urls_processed', []))}"
+        ]
+        
+        if extraction_result.get('urls_processed'):
+            context_parts.append(f"\n=== URLS DISCOVERED ===")
+            for i, url in enumerate(extraction_result['urls_processed'][:3], 1):
+                context_parts.append(f"{i}. {url}")
+        
+        if extraction_result.get('content_summary'):
+            context_parts.append(f"\n=== SEARCH RESPONSE ===")
+            context_parts.append(extraction_result['content_summary'][:300] + "...")
+        
+        context_parts.append(f"\nNote: Limited content extraction - analysis based on search results only")
+        
+        return '\n'.join(context_parts)
+    
+    def _create_fallback_web_context(self, statement: str, reason: str) -> str:
+        """Create fallback context when web extraction completely fails"""
+        return f"""=== WEB EXTRACTION FAILED ===
+Statement: {statement}
+Status: Web content extraction unavailable
+Reason: {reason}
+Timestamp: {datetime.now().isoformat()}
+Note: Analysis will rely on LLM training data only
+"""
+    
+    def _perform_llm_research_with_web_context(
+        self, 
+        request: ResearchRequestAPI, 
+        profile_id: Optional[str], 
+        web_context: str
+    ) -> object:
+        """
+        Perform LLM research enhanced with web context.
+        
+        Args:
+            request: Research request
+            profile_id: Profile ID if available
+            web_context: Extracted web content context
+            
+        Returns:
+            LLM research result enhanced with web content
+        """
+        # Combine original context with web context
+        enhanced_context = f"{request.context}\n\n{web_context}" if request.context else web_context
+        
+        llm_request = LLMResearchRequest(
+            statement=request.statement,
+            source=request.source,
+            context=enhanced_context,  # Enhanced with web content
+            country=request.country,
+            category=request.category,
+            profile_id=profile_id
+        )
+        
+        logger.info("Starting LLM research with web content enhancement")
+        result = self.llm_service.research_statement(llm_request)
+        
+        # Ensure profile_id is set in result
+        if profile_id and not result.profile_id:
+            result.profile_id = profile_id
+        
+        # Mark that this research includes web content
+        if hasattr(result, 'research_method'):
+            result.research_method = f"{result.research_method} + Web Content"
+        
+        logger.info(f"LLM research with web content completed - Status: {result.status}")
+        return result
+    
+    async def _perform_focused_research(
         self, 
         request: ResearchRequestAPI, 
         llm_result: object,
         processing_start_time: float
     ) -> object:
         """
-        Perform tri-factor research enhancement on LLM result.
+        Perform focused research enhancement on LLM result.
         
         Args:
             request: Original research request
-            llm_result: Base LLM research result
+            llm_result: Base LLM research result (already enhanced with web content)
             processing_start_time: When processing started
             
         Returns:
-            Enhanced LLM result with tri-factor research data
+            Enhanced LLM result with focused research data
         """
         try:
-            logger.info("Starting tri-factor research enhancement...")
+            logger.info("Starting focused research enhancement...")
             
             # Convert request to LLM format for orchestrator
             llm_request = LLMResearchRequest(
@@ -147,18 +332,18 @@ class FactCheckingCoreService:
                 profile_id=getattr(llm_result, 'profile_id', None)
             )
             
-            # Perform tri-factor research
-            enhanced_result = await self.research_orchestrator.perform_tri_factor_research(
+            # Perform focused research using the orchestrator
+            enhanced_result = await self.research_orchestrator.perform_focused_research(
                 request=llm_request,
                 llm_response=llm_result
             )
             
-            logger.info("Tri-factor research enhancement completed")
+            logger.info("Focused research enhancement completed")
             return enhanced_result
             
         except Exception as e:
-            logger.error(f"Tri-factor research failed, falling back to LLM-only: {e}")
-            # Return original LLM result if tri-factor fails
+            logger.error(f"Focused research failed, using web-enhanced LLM result: {e}")
+            # Return LLM result that already has web content enhancement
             return llm_result
     
     def _process_speaker_profile(self, source: str) -> Optional[str]:
@@ -221,50 +406,30 @@ class FactCheckingCoreService:
             logger.error(f"Duplicate check failed: {str(e)}")
             return None
     
-    def _perform_llm_research(self, request: ResearchRequestAPI, profile_id: Optional[str]) -> object:
-        """
-        Perform LLM research on the statement.
-        
-        Args:
-            request: Research request
-            profile_id: Profile ID if available
-            
-        Returns:
-            LLM research result
-        """
-        llm_request = LLMResearchRequest(
-            statement=request.statement,
-            source=request.source,
-            context=request.context,
-            country=request.country,
-            category=request.category,
-            profile_id=profile_id
-        )
-        
-        logger.info("Starting base LLM research")
-        result = self.llm_service.research_statement(llm_request)
-        
-        # Ensure profile_id is set in result
-        if profile_id and not result.profile_id:
-            result.profile_id = profile_id
-        
-        logger.info(f"Base LLM research completed - Status: {result.status}")
-        return result
-    
     def _create_enhanced_response(
         self, 
         request: ResearchRequestAPI, 
         llm_result: object, 
-        profile_id: Optional[str]
+        profile_id: Optional[str],
+        web_context: str = ""
     ) -> EnhancedLLMResearchResponse:
         """
-        Create enhanced response with request metadata and tri-factor research data.
-        Enhanced with proper error handling and type conversion.
+        Create enhanced response with request metadata and web content data.
+        Enhanced with web content extraction information.
         """
         try:
             # Collect any research errors
             research_errors = []
             fallback_reason = None
+            
+            # Check for web extraction issues
+            if "WEB EXTRACTION FAILED" in web_context:
+                research_errors.append("Web content extraction failed")
+            elif "LIMITED WEB SEARCH" in web_context:
+                research_errors.append("Limited web content extraction")
+            
+            # Extract web metadata
+            web_metadata = self._extract_web_content_metadata(web_context)
             
             # Check for web search errors
             if hasattr(llm_result, 'additional_context') and 'error' in str(llm_result.additional_context):
@@ -290,21 +455,19 @@ class FactCheckingCoreService:
                         research_sources = metadata_dict.get('research_sources', [])
                     
                     if research_sources:
-                        expected_sources = ['llm_training_data', 'web_search', 'resource_analysis']
+                        expected_sources = ['llm_training_data', 'web_search', 'web_content']
                         missing_sources = [s for s in expected_sources if s not in research_sources]
                         if missing_sources:
                             research_errors.append(f"Failed sources: {', '.join(missing_sources)}")
                             
                 except Exception as metadata_error:
                     logger.warning(f"Failed to extract research sources from metadata: {metadata_error}")
-                    logger.warning(f"Metadata type: {type(research_metadata)}")
-                    logger.warning(f"Metadata content: {research_metadata}")
                     research_errors.append("Could not parse research metadata")
         
-            # Set fallback reason if only LLM research was successful
+            # Set fallback reason based on available research methods
             research_method = getattr(llm_result, 'research_method', 'Unknown')
-            if 'llm' in research_method.lower() and 'tri-factor' not in research_method.lower():
-                fallback_reason = "External research services unavailable"
+            if 'web content' not in research_method.lower() and web_metadata.get('sources_processed', 0) == 0:
+                fallback_reason = "Web content extraction unavailable"
             
             # Convert datetime to string if needed
             request_datetime = request.datetime
@@ -316,6 +479,15 @@ class FactCheckingCoreService:
                 request_datetime = str(request_datetime)
             
             processed_at = datetime.utcnow().isoformat()
+            
+            # Create web findings from extracted content
+            web_findings = []
+            if web_metadata.get('sources_processed', 0) > 0:
+                web_findings.append(f"Analyzed content from {web_metadata['sources_processed']} web sources")
+                if web_metadata.get('verification_status'):
+                    web_findings.append(f"Web verification: {web_metadata['verification_status']}")
+                if web_metadata.get('key_findings_count', 0) > 0:
+                    web_findings.append(f"Extracted {web_metadata['key_findings_count']} key findings from web content")
             
             return EnhancedLLMResearchResponse(
                 # Original LLM result fields
@@ -331,7 +503,7 @@ class FactCheckingCoreService:
                 research_method=research_method,
                 profile_id=profile_id,
                 
-                # Enhanced tri-factor fields
+                # Enhanced focused research fields
                 expert_perspectives=getattr(llm_result, 'expert_perspectives', []),
                 key_findings=getattr(llm_result, 'key_findings', []),
                 research_summary=getattr(llm_result, 'research_summary', getattr(llm_result, 'verdict', '')),
@@ -339,7 +511,7 @@ class FactCheckingCoreService:
                 confidence_score=getattr(llm_result, 'confidence_score', 70),
                 research_metadata=research_metadata,
                 llm_findings=getattr(llm_result, 'llm_findings', []),
-                web_findings=getattr(llm_result, 'web_findings', []),
+                web_findings=getattr(llm_result, 'web_findings', []) + web_findings,
                 resource_findings=getattr(llm_result, 'resource_findings', []),
                 
                 # Request metadata
@@ -359,7 +531,6 @@ class FactCheckingCoreService:
         except Exception as e:
             logger.error(f"Failed to create enhanced response: {e}")
             logger.error(f"LLM result type: {type(llm_result)}")
-            logger.error(f"LLM result attributes: {dir(llm_result) if hasattr(llm_result, '__dict__') else 'No __dict__'}")
             
             # Create minimal fallback response
             request_datetime_str = request.datetime.isoformat() if hasattr(request.datetime, 'isoformat') else str(request.datetime)
@@ -368,7 +539,7 @@ class FactCheckingCoreService:
                 valid_sources=getattr(llm_result, 'valid_sources', ''),
                 verdict=getattr(llm_result, 'verdict', 'Analysis completed with limited data'),
                 status=getattr(llm_result, 'status', 'UNVERIFIABLE'),
-                research_method='LLM Only (Enhanced Response Failed)',
+                research_method='LLM with Web Content (Response Creation Failed)',
                 request_statement=request.statement,
                 request_source=request.source,
                 request_context=request.context,
@@ -378,6 +549,37 @@ class FactCheckingCoreService:
                 fallback_reason="Enhanced response creation failed"
             )
     
+    def _extract_web_content_metadata(self, web_context: str) -> Dict[str, any]:
+        """Extract metadata from web content context"""
+        metadata = {
+            'sources_processed': 0,
+            'urls_found': 0,
+            'verification_status': None,
+            'key_findings_count': 0
+        }
+        
+        try:
+            for line in web_context.split('\n'):
+                if 'Web sources processed:' in line:
+                    metadata['sources_processed'] = int(line.split('Web sources processed:')[1].strip())
+                elif 'URLs analyzed:' in line:
+                    metadata['urls_found'] = int(line.split('URLs analyzed:')[1].strip())
+                elif 'Status:' in line and '===' not in line:
+                    metadata['verification_status'] = line.split('Status:')[1].strip()
+            
+            # Count key findings
+            if '=== KEY FINDINGS FROM WEB ===' in web_context:
+                findings_section = web_context.split('=== KEY FINDINGS FROM WEB ===')[1]
+                if '===' in findings_section:
+                    findings_section = findings_section.split('===')[0]
+                finding_lines = [line for line in findings_section.split('\n') if line.strip().startswith(('1.', '2.', '3.', '4.', '5.'))]
+                metadata['key_findings_count'] = len(finding_lines)
+                
+        except Exception as e:
+            logger.warning(f"Failed to extract web content metadata: {e}")
+        
+        return metadata
+    
     def _save_to_database(
         self, 
         request: ResearchRequestAPI, 
@@ -385,66 +587,36 @@ class FactCheckingCoreService:
         profile_id: Optional[str]
     ) -> Optional[str]:
         """
-        Save research result to database.
+        Save research result to database using original Supabase SDK approach.
         
         Args:
             request: Research request
-            llm_result: LLM research result (with tri-factor data)
+            llm_result: LLM research result (with web content and focused research data)
             profile_id: Profile ID if available
             
         Returns:
             Database ID if successful, None otherwise
         """
         try:
-            logger.info("Saving tri-factor research result to database...")
+            logger.info("Saving research result with web content to database...")
             
+            # Create ResearchRequest object using the original working approach
             research_request = ResearchRequest(
                 statement=request.statement,
                 source=request.source,
                 context=request.context,
                 datetime=request.datetime,
+                statement_date=getattr(request, 'statement_date', None),
                 country=request.country,
                 category=request.category,
                 profile_id=profile_id
             )
             
-            # Create the database record
-            db_record = {
-                'statement': request.statement,
-                'source': request.source,
-                'context': request.context,
-                'request_datetime': request.datetime,
-                'statement_date': request.statement_date,
-                'country': request.country,
-                'category': request.category,
-                'valid_sources': llm_result.valid_sources,
-                'verdict': llm_result.verdict,
-                'status': llm_result.status,
-                'correction': llm_result.correction,
-                'resources_agreed': llm_result.llm_findings,  # Map to new schema
-                'resources_disagreed': llm_result.web_findings,  # Map to new schema
-                'experts': llm_result.resource_findings,  # Map to new schema
-                'profile_id': profile_id
-            }
+            # Use the original db_service method that was working
+            database_id = self.db_service.save_research_result(research_request, llm_result)
             
-            # Save to database using your database manager
-            query = """
-            INSERT INTO research_results (
-                statement, source, context, request_datetime, statement_date,
-                country, category, valid_sources, verdict, status, correction,
-                resources_agreed, resources_disagreed, experts, profile_id
-            ) VALUES (
-                %(statement)s, %(source)s, %(context)s, %(request_datetime)s, %(statement_date)s,
-                %(country)s, %(category)s, %(valid_sources)s, %(verdict)s, %(status)s, %(correction)s,
-                %(resources_agreed)s, %(resources_disagreed)s, %(experts)s, %(profile_id)s
-            ) RETURNING id
-            """
-            
-            result = self.db_manager.execute_query(query, db_record)
-            
-            if result:
-                database_id = str(result[0]['id'])
-                logger.info(f"Saved research result to database with ID: {database_id}")
+            if database_id:
+                logger.info(f"Saved research result with web content to database with ID: {database_id}")
                 return database_id
             else:
                 logger.error("Failed to save research result to database")
@@ -452,6 +624,8 @@ class FactCheckingCoreService:
                 
         except Exception as e:
             logger.error(f"Error saving to database: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return None
     
     def _convert_existing_result_to_response(
@@ -462,6 +636,7 @@ class FactCheckingCoreService:
     ) -> EnhancedLLMResearchResponse:
         """
         Convert existing database result to enhanced response format.
+        Enhanced to properly handle expert_perspectives from database.
         
         Args:
             request: Current research request
@@ -471,6 +646,19 @@ class FactCheckingCoreService:
         Returns:
             Enhanced response based on existing data
         """
+        # Parse expert perspectives from database
+        expert_perspectives = []
+        perspectives_data = existing_result.get("expert_perspectives", [])
+        
+        if perspectives_data:
+            for perspective_dict in perspectives_data:
+                try:
+                    perspective = ExpertPerspective(**perspective_dict)
+                    expert_perspectives.append(perspective)
+                except Exception as e:
+                    logger.warning(f"Failed to parse expert perspective: {e}")
+                    continue
+        
         return EnhancedLLMResearchResponse(
             # Core result fields
             valid_sources=existing_result.get("valid_sources", ""),
@@ -481,12 +669,12 @@ class FactCheckingCoreService:
             category=existing_result.get("category"),
             resources_agreed=existing_result.get("resources_agreed", {}),
             resources_disagreed=existing_result.get("resources_disagreed", {}),
-            experts=ExpertOpinion(**existing_result.get("experts", {})),
+            experts=ExpertOpinion(**existing_result.get("experts", {})) if existing_result.get("experts") else None,
             research_method=existing_result.get("research_method", "Database Retrieval"),
             profile_id=existing_result.get("profile_id"),
             
-            # Enhanced fields (may be empty for legacy results)
-            expert_perspectives=existing_result.get("expert_perspectives", []),
+            # Enhanced fields with expert perspectives
+            expert_perspectives=expert_perspectives,  # Properly parsed expert perspectives
             key_findings=existing_result.get("key_findings", []),
             research_summary=existing_result.get("research_summary", existing_result.get("verdict", "")),
             additional_context=existing_result.get("additional_context", ""),
@@ -503,7 +691,7 @@ class FactCheckingCoreService:
             request_datetime=request.datetime,
             request_country=request.country,
             request_category=request.category,
-            processed_at=datetime.fromisoformat(existing_result.get("processed_at", datetime.utcnow().isoformat())),
+            processed_at=existing_result.get("processed_at", datetime.utcnow().isoformat()),
             database_id=existing_id,
             is_duplicate=True
         )

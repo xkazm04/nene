@@ -1,1 +1,0 @@
-Simple Joe to evaluate prompt, he is not 

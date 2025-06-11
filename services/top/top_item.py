@@ -74,9 +74,7 @@ class TopItemsService:
 
     async def search_items(
         self,
-        category: Optional[CategoryEnum] = None,
-        subcategory: Optional[str] = None,
-        search_query: Optional[str] = None,
+        filters: AdvancedItemSearchFilters,
         limit: int = 50,
         offset: int = 0
     ) -> List[ItemResponse]:
@@ -84,17 +82,44 @@ class TopItemsService:
         try:
             query = self.supabase.table('items').select('*')
 
-            if category:
-                query = query.eq('category', category.value)
-            if subcategory:
-                query = query.eq('subcategory', subcategory)
-            if search_query:
-                query = query.ilike('name', f'%{search_query}%')
+            # Fix: Check if category is enum or string
+            if filters.category:
+                category_value = filters.category.value if hasattr(filters.category, 'value') else filters.category
+                query = query.eq('category', category_value)
+                
+            if filters.subcategory:
+                query = query.eq('subcategory', filters.subcategory)
+                
+            if filters.search_query:
+                query = query.or_(f'name.ilike.%{filters.search_query}%,description.ilike.%{filters.search_query}%')
 
-            result = query.order('name').range(
-                offset, offset + limit - 1).execute()
+            # Add tag filtering if tags are provided
+            if filters.tags:
+                # This would require a more complex query with joins - simplified for now
+                pass
+
+            # Add year filtering
+            if filters.year_from:
+                query = query.gte('item_year', filters.year_from)
+            if filters.year_to:
+                query = query.lte('item_year', filters.year_to)
+
+            # Add sorting
+            if filters.sort_by == "popularity":
+                query = query.order('selection_count', desc=True)
+            elif filters.sort_by == "recent":
+                query = query.order('created_at', desc=True)
+            elif filters.sort_by == "ranking":
+                # Would need to join with list_items for average ranking
+                query = query.order('view_count', desc=True)  # Fallback to view_count
+            else:  # default to name
+                query = query.order('name')
+
+            # Apply pagination
+            result = query.range(offset, offset + limit - 1).execute()
 
             return [ItemResponse(**item) for item in result.data] if result.data else []
+            
         except Exception as e:
             logger.error(f"Error searching items: {e}")
             raise

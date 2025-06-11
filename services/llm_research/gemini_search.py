@@ -22,7 +22,7 @@ except Exception as e:
 # while "Pro" might offer more advanced reasoning for highly complex queries.
 # Check the official documentation for the latest model names and capabilities.
 try:
-    model = genai.GenerativeModel('gemini-1.5-flash-latest') # Or 'gemini-1.5-pro-latest'
+    model = genai.GenerativeModel('gemini-2.0-flash-lite') # Or 'gemini-1.5-pro-latest'
 except Exception as e:
     print(f"🔴 ERROR: Could not initialize the model: {e}")
     exit()

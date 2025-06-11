@@ -32,10 +32,10 @@ class ExpertOpinion(BaseModel):
 class ExpertPerspective(BaseModel):
     """Individual expert perspective for detailed analysis"""
     expert_name: str
-    credentials: str
     stance: Literal["SUPPORTING", "OPPOSING", "NEUTRAL"]
     reasoning: str
     confidence_level: float  # 0-100
+    summary: str  # One sentence summary of perspective
     source_type: Optional[Literal["llm", "web", "resource"]] = "llm"
     expertise_area: Optional[str] = None
     publication_date: Optional[str] = None
@@ -129,6 +129,7 @@ def convert_expert_opinion_to_perspectives(expert_opinion: ExpertOpinion) -> Lis
             credentials="Expert in Critical Analysis",
             stance="NEUTRAL",
             reasoning=expert_opinion.critic,
+            summary="One sentence summary of critical analysis",
             confidence_level=75.0,
             source_type="llm",
             expertise_area="Critical Analysis"
@@ -140,6 +141,7 @@ def convert_expert_opinion_to_perspectives(expert_opinion: ExpertOpinion) -> Lis
             credentials="Expert in Counter-Arguments",
             stance="OPPOSING",
             reasoning=expert_opinion.devil,
+            summary="One sentence summary of counter-arguments",
             confidence_level=70.0,
             source_type="llm",
             expertise_area="Counter-Analysis"
@@ -151,6 +153,7 @@ def convert_expert_opinion_to_perspectives(expert_opinion: ExpertOpinion) -> Lis
             credentials="Technical/Scientific Expert",
             stance="NEUTRAL",
             reasoning=expert_opinion.nerd,
+            summary="One sentence summary of technical analysis",
             confidence_level=85.0,
             source_type="llm",
             expertise_area="Technical Analysis"
@@ -162,6 +165,7 @@ def convert_expert_opinion_to_perspectives(expert_opinion: ExpertOpinion) -> Lis
             credentials="Expert in Future Implications",
             stance="NEUTRAL",
             reasoning=expert_opinion.psychic,
+            summary="One sentence summary of future implications",
             confidence_level=60.0,
             source_type="llm",
             expertise_area="Predictive Analysis"

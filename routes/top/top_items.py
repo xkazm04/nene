@@ -58,7 +58,7 @@ async def search_items(
     """Enhanced search items with filters"""
     try:
         filters = ItemSearchFilters(
-            category=category,
+            category=category,  
             subcategory=subcategory,
             search_query=search,
             tags=tags,

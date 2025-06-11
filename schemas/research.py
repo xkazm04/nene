@@ -43,7 +43,6 @@ class EnhancedLLMResearchResponse(BaseModel):
     expert_perspectives: List[Union[Dict[str, Any], ExpertPerspective]] = []
     key_findings: List[str] = []
     research_summary: str = ""
-    additional_context: str = ""
     confidence_score: int = 50
     research_metadata: Optional[Union[Dict[str, Any], ResearchMetadata]] = None
     llm_findings: List[str] = []

@@ -3,9 +3,8 @@ from enum import Enum
 class CategoryEnum(str, Enum):
     """Category enumeration based on actual data usage"""
     sports = "sports"
-    games = "games"  # Fixed from "entertainment"
-    music = "music"  # Fixed from "technology"
-    business = "business"
+    games = "games" 
+    music = "music" 
     other = "other"
 
 class AccoladeType(str, Enum):

@@ -229,7 +229,6 @@ async def health_check():
     try:
         import os
         
-        # FIXED: Use GEMINI_API_KEY instead of GOOGLE_API_KEY
         gemini_available = bool(os.getenv('GOOGLE_API_KEY'))
         firecrawl_available = bool(os.getenv('FIRECRAWL_API_KEY'))
         
