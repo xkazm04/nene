@@ -14,31 +14,32 @@ supabase_url = os.getenv("SUPABASE_URL")
 supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 supabase: Client = create_client(supabase_url, supabase_key)
 
-def parse_supabase_response(data: List[Dict[str, Any]]) -> List[Video]:
-    """Parse Supabase response into Video models."""
+def parse_supabase_response(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Parse Supabase response into frontend-compatible format."""
     videos = []
     for row in data:
-        video = Video(
-            id=str(row.get('id', '')),
-            video_url=row.get('video_url', ''),
-            source=row.get('source', ''),
-            researched=row.get('researched', False),
-            title=row.get('title'),
-            verdict=row.get('verdict'),
-            duration_seconds=row.get('duration_seconds'),
-            speaker_name=row.get('speaker_name'),
-            language_code=row.get('language_code'),
-            audio_extracted=row.get('audio_extracted', False),
-            transcribed=row.get('transcribed', False),
-            analyzed=row.get('analyzed', False),
-            created_at=row.get('created_at'),
-            updated_at=row.get('updated_at'),
-            processed_at=row.get('processed_at')
-        )
+        # Convert to frontend-compatible format matching video_api.ts Video interface
+        video = {
+            "id": str(row.get('id', '')),
+            "video_url": row.get('video_url', ''),
+            "source": row.get('source', ''),
+            "researched": row.get('researched', False),
+            "title": row.get('title'),
+            "verdict": row.get('verdict'),
+            "duration_seconds": row.get('duration_seconds'),
+            "speaker_name": row.get('speaker_name'),
+            "language_code": row.get('language_code'),
+            "audio_extracted": row.get('audio_extracted', False),
+            "transcribed": row.get('transcribed', False),
+            "analyzed": row.get('analyzed', False),
+            "created_at": row.get('created_at'),
+            "updated_at": row.get('updated_at'),
+            "processed_at": row.get('processed_at')
+        }
         videos.append(video)
     return videos
 
-@router.get("/", response_model=List[Video])
+@router.get("/", response_model=List[Dict[str, Any]])
 # @cache(expire=300)  # Cache for 5 minutes
 async def get_videos(
     # Pagination
@@ -59,7 +60,7 @@ async def get_videos(
 ):
     """
     Get all videos with filtering, searching, sorting and pagination.
-    Includes cross-table filtering by timestamp categories.
+    Returns frontend-compatible format.
     """
     try:
         # Start with base query
@@ -103,32 +104,23 @@ async def get_videos(
             
         # Add search functionality
         if search:
-            # Supabase doesn't support OR conditions directly in the query builder
-            # We'll need to use the textSearch or implement multiple queries
-            search_queries = []
+            # Get video IDs that match search criteria
+            search_video_ids = set()
             
-            # Search in title
-            if search:
-                title_query = supabase.table('videos').select('*').ilike('title', f'%{search}%')
-                speaker_query = supabase.table('videos').select('*').ilike('speaker_name', f'%{search}%')
-                url_query = supabase.table('videos').select('*').ilike('video_url', f'%{search}%')
-                verdict_query = supabase.table('videos').select('*').ilike('verdict', f'%{search}%')
-                
-                # Execute search queries
-                search_results = []
-                for search_query in [title_query, speaker_query, url_query, verdict_query]:
-                    try:
-                        result = search_query.execute()
-                        search_results.extend(result.data)
-                    except Exception as e:
-                        logger.warning(f"Search query failed: {e}")
-                
-                # Get unique video IDs from search results
-                if search_results:
-                    search_video_ids = list(set([row['id'] for row in search_results]))
-                    query = query.in_('id', search_video_ids)
-                else:
-                    return []
+            # Search in multiple fields
+            for field in ['title', 'speaker_name', 'video_url', 'verdict']:
+                try:
+                    field_query = supabase.table('videos').select('id').ilike(field, f'%{search}%')
+                    result = field_query.execute()
+                    if result.data:
+                        search_video_ids.update([row['id'] for row in result.data])
+                except Exception as e:
+                    logger.warning(f"Search query failed for field {field}: {e}")
+            
+            if search_video_ids:
+                query = query.in_('id', list(search_video_ids))
+            else:
+                return []
         
         # Add sorting
         valid_sort_fields = {
