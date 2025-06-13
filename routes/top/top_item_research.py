@@ -18,7 +18,7 @@ class ItemResearchRequest(BaseModel):
     subcategory: str
     user_provided_description: Optional[str] = None
     auto_create: bool = False
-    allow_duplicate: bool = False  # New parameter for duplicate handling
+    allow_duplicate: bool = False 
     research_depth: ResearchDepth = ResearchDepth.standard
     duplicate_action: DuplicateAction = DuplicateAction.reject
 

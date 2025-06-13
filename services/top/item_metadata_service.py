@@ -1,26 +1,43 @@
 import asyncio
 import logging
 import re
+import json
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
 from models.top_models.enums import CategoryEnum, ResearchDepth
 from models.top import ItemCreate, ItemResponse
 from services.llm_clients.groq_client import GroqLLMClient
-from services.web_research.firecrawl_metadata_service import firecrawl_metadata_service
 from services.top.top_item import top_items_service
 from config.database_top import supabase
 from utils.metadata_prompt_builder import MetadataPromptBuilder
+from prompts.wiki_prompts import get_research_prompt
 
 logger = logging.getLogger(__name__)
 
 class ItemMetadataService:
-    """Service for researching item metadata using LLM + Web sources"""
+    """Service for researching item metadata using LLM + Simple Gemini research"""
     
     def __init__(self):
         self.llm_client = GroqLLMClient()
-        self.web_service = firecrawl_metadata_service
         self.prompt_builder = MetadataPromptBuilder()
+        
+        # Initialize Gemini for simple research (fallback)
+        try:
+            import google.generativeai as genai
+            import os
+            api_key = os.environ.get('GOOGLE_API_KEY')
+            if api_key:
+                genai.configure(api_key=api_key)
+                self.gemini_model = genai.GenerativeModel('gemini-1.5-flash-latest')
+                self.gemini_available = True
+                logger.info("Gemini model initialized for fallback research")
+            else:
+                self.gemini_available = False
+                logger.warning("GOOGLE_API_KEY not found, Gemini fallback disabled")
+        except Exception as e:
+            self.gemini_available = False
+            logger.warning(f"Failed to initialize Gemini: {e}")
         
         # Category-specific group mappings for validation
         self.category_group_mappings = {
@@ -51,7 +68,7 @@ class ItemMetadataService:
         research_depth: ResearchDepth = ResearchDepth.standard
     ) -> Dict[str, Any]:
         """
-        Research item metadata with LLM as primary source and Wikipedia for enhancement
+        Research item metadata with LLM as primary source and Gemini for enhancement
         """
         try:
             logger.info(f"Researching metadata for: {name} ({category.value}/{subcategory}) - depth: {research_depth.value}")
@@ -59,11 +76,11 @@ class ItemMetadataService:
             # Step 1: LLM Research (Primary) - Use LLM knowledge as the main source
             llm_result = await self._research_with_llm(name, category, subcategory, user_description)
             
-            # Step 2: Web Research (Enhancement) - Only for missing attributes
-            web_result = await self._research_with_web(name, category, subcategory, llm_result.get('llm_data', {}))
+            # Step 2: Gemini Research (Enhancement) - Only for missing attributes
+            gemini_result = await self._research_with_gemini(name, category, subcategory, llm_result.get('llm_data', {}))
             
             # Step 3: Combine results with LLM as primary
-            combined_result = self._combine_research_results(llm_result, web_result, category, subcategory)
+            combined_result = self._combine_research_results(llm_result, gemini_result, category, subcategory)
             combined_result['research_depth'] = research_depth.value
             
             logger.info(f"Research completed for {name} with {combined_result['llm_confidence']}% confidence")
@@ -75,6 +92,7 @@ class ItemMetadataService:
                 'description': None,
                 'group': None,
                 'item_year': None,
+                'item_year_to': None,
                 'reference_url': None,
                 'image_url': None,
                 'llm_confidence': 0,
@@ -122,71 +140,239 @@ class ItemMetadataService:
             logger.warning(f"LLM research failed for {name}: {e}")
             return {'llm_confidence': 0, 'llm_data': {}, 'llm_error': str(e)}
     
-    async def _research_with_web(
+    async def _research_with_gemini(
         self, 
         name: str, 
         category: CategoryEnum, 
         subcategory: str,
         llm_data: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Research using Wikipedia for MISSING attributes only"""
+        """Research using Gemini for MISSING attributes only - Simple approach from new.py"""
         try:
-            if not self.web_service._service_available:
-                return {'web_confidence': 0, 'web_data': {}, 'web_error': 'Firecrawl not available'}
+            if not self.gemini_available:
+                return {'gemini_confidence': 0, 'gemini_data': {}, 'gemini_error': 'Gemini not available'}
             
             # Check what's missing from LLM data
             missing_attributes = self._identify_missing_attributes(llm_data)
             
             if not missing_attributes:
-                logger.info(f"All metadata available from LLM for {name}, skipping web research")
-                return {'web_confidence': 0, 'web_data': {}, 'web_info': 'No missing attributes'}
+                logger.info(f"All metadata available from LLM for {name}, skipping Gemini research")
+                return {'gemini_confidence': 0, 'gemini_data': {}, 'gemini_info': 'No missing attributes'}
             
-            logger.info(f"Searching Wikipedia for missing attributes: {missing_attributes} for {name}")
+            logger.info(f"Using Gemini for missing attributes: {missing_attributes} for {name}")
             
-            # Search Wikipedia for metadata
-            web_result = await self.web_service.search_wikipedia_metadata(name, category.value, subcategory)
+            # Use the simple prompt approach from new.py
+            prompt = get_research_prompt(name, category.value, subcategory)
             
-            if not web_result.get('success', False):
+            # Generate content with retry logic
+            research_data = await self._get_gemini_research_with_retry(name, prompt, retry_count=2)
+            
+            if not research_data or research_data.get('status') == 'failed':
                 return {
-                    'web_confidence': 0, 
-                    'web_data': {}, 
-                    'web_error': web_result.get('error', 'Wikipedia search failed')
+                    'gemini_confidence': 0, 
+                    'gemini_data': {}, 
+                    'gemini_error': 'Gemini research failed or no data found'
                 }
             
-            # Filter web metadata to only include missing attributes
-            web_metadata = web_result.get('metadata', {})
-            filtered_metadata = {
-                key: value for key, value in web_metadata.items() 
-                if key in missing_attributes and value is not None
-            }
-            
-            # Add reference URL and image if available
-            if web_result.get('reference_url'):
-                filtered_metadata['reference_url'] = web_result['reference_url']
+            # Map research data to our format and filter for missing attributes only
+            mapped_data = self._map_gemini_response(research_data, missing_attributes)
             
             return {
-                'web_confidence': 70,
-                'web_data': filtered_metadata,
-                'web_method': 'wikipedia_enhancement',
-                'missing_attributes_found': list(filtered_metadata.keys())
+                'gemini_confidence': 75,
+                'gemini_data': mapped_data,
+                'gemini_method': 'simple_research',
+                'missing_attributes_found': list(mapped_data.keys())
             }
             
         except Exception as e:
-            logger.warning(f"Web research failed for {name}: {e}")
-            return {'web_confidence': 0, 'web_data': {}, 'web_error': str(e)}
+            logger.warning(f"Gemini research failed for {name}: {e}")
+            return {'gemini_confidence': 0, 'gemini_data': {}, 'gemini_error': str(e)}
+    
+    async def _get_gemini_research_with_retry(self, name: str, prompt: str, retry_count: int = 2) -> Optional[Dict[str, Any]]:
+        """Get research data from Gemini with retry logic - adapted from new.py"""
+        for attempt in range(retry_count + 1):
+            try:
+                if attempt > 0:
+                    logger.info(f"Retry attempt {attempt}/{retry_count} for {name}")
+                    await asyncio.sleep(2)  # Wait between retries
+                
+                # Generate content
+                response = self.gemini_model.generate_content(prompt)
+                
+                if response and response.text:
+                    logger.info(f"Received response from Gemini for {name}")
+                    
+                    # Use improved JSON extraction from new.py
+                    data = self._extract_json_from_response(response.text)
+                    
+                    if data:
+                        if data.get('status') == 'failed':
+                            logger.warning(f"Gemini couldn't find information for {name}")
+                            if attempt < retry_count:
+                                continue
+                        return data
+                    else:
+                        logger.warning(f"Could not extract valid JSON from response for {name}")
+                        if attempt < retry_count:
+                            continue
+                        return None
+                else:
+                    logger.warning(f"Empty response from Gemini for {name}")
+                    if attempt < retry_count:
+                        continue
+                    return None
+                    
+            except Exception as e:
+                logger.warning(f"Error getting Gemini research data (attempt {attempt + 1}) for {name}: {e}")
+                if attempt < retry_count:
+                    continue
+                return None
+        
+        return None
+    
+    def _extract_json_from_response(self, response_text: str) -> Optional[Dict[str, Any]]:
+        """Extract and parse JSON from Gemini response - adapted from new.py"""
+        try:
+            # Clean the response
+            cleaned_text = self._clean_json_response(response_text)
+            
+            # Method 1: Try to parse the cleaned text directly
+            try:
+                data = json.loads(cleaned_text)
+                return data
+            except json.JSONDecodeError:
+                pass
+            
+            # Method 2: Extract JSON blocks
+            json_blocks = []
+            brace_count = 0
+            start_pos = -1
+            
+            for i, char in enumerate(cleaned_text):
+                if char == '{':
+                    if brace_count == 0:
+                        start_pos = i
+                    brace_count += 1
+                elif char == '}':
+                    brace_count -= 1
+                    if brace_count == 0 and start_pos != -1:
+                        json_block = cleaned_text[start_pos:i+1]
+                        json_blocks.append(json_block)
+                        start_pos = -1
+            
+            # Try to parse each JSON block
+            for json_block in json_blocks:
+                try:
+                    json_block = re.sub(r',(\s*[}\]])', r'\1', json_block)
+                    data = json.loads(json_block)
+                    return data
+                except json.JSONDecodeError:
+                    continue
+            
+            # Method 3: Manual extraction
+            return self._manual_json_extraction(cleaned_text)
+            
+        except Exception as e:
+            logger.warning(f"Error in JSON extraction: {e}")
+            return None
+    
+    def _clean_json_response(self, text: str) -> str:
+        """Clean JSON response - from new.py"""
+        # Remove markdown code block markers
+        text = re.sub(r'```json\s*', '', text)
+        text = re.sub(r'```\s*$', '', text)
+        text = text.strip()
+        
+        # Remove // comments from JSON
+        lines = text.split('\n')
+        cleaned_lines = []
+        
+        for line in lines:
+            comment_match = re.search(r'(?<!:)//.*$', line)
+            if comment_match:
+                line = line[:comment_match.start()].rstrip()
+                line = re.sub(r',\s*$', '', line)
+            cleaned_lines.append(line)
+        
+        cleaned_text = '\n'.join(cleaned_lines)
+        cleaned_text = re.sub(r',(\s*[}\]])', r'\1', cleaned_text)
+        
+        return cleaned_text.strip()
+    
+    def _manual_json_extraction(self, text: str) -> Optional[Dict[str, Any]]:
+        """Manually extract data from JSON-like text - from new.py"""
+        try:
+            data = {}
+            
+            patterns = {
+                'status': r'"status":\s*"([^"]*)"',
+                'item_year': r'"item_year":\s*"([^"]*)"',
+                'item_year_to': r'"item_year_to":\s*"([^"]*)"',
+                'reference_url': r'"reference_url":\s*"([^"]*)"',
+                'image_url': r'"image_url":\s*"([^"]*)"',
+                'group': r'"group":\s*"([^"]*)"',
+            }
+            
+            for key, pattern in patterns.items():
+                match = re.search(pattern, text, re.IGNORECASE)
+                if match:
+                    data[key] = match.group(1)
+            
+            if data and 'status' in data:
+                return data
+            else:
+                return None
+                
+        except Exception as e:
+            logger.warning(f"Manual extraction error: {e}")
+            return None
+    
+    def _map_gemini_response(self, research_data: Dict[str, Any], missing_attributes: List[str]) -> Dict[str, Any]:
+        """Map Gemini research response to our metadata format"""
+        mapped = {}
+        
+        # Map the fields we care about
+        field_mappings = {
+            'item_year': 'item_year',
+            'item_year_to': 'item_year_to', 
+            'reference_url': 'reference_url',
+            'image_url': 'image_url',
+            'group': 'group'
+        }
+        
+        for research_field, metadata_field in field_mappings.items():
+            if research_field in research_data and research_data[research_field] and metadata_field in missing_attributes:
+                value = research_data[research_field]
+                
+                # Clean and validate the value
+                if research_field in ['item_year', 'item_year_to']:
+                    try:
+                        # Convert string years to integers
+                        year_value = int(str(value).strip('"'))
+                        if 1800 <= year_value <= datetime.now().year + 2:
+                            mapped[metadata_field] = year_value
+                    except (ValueError, TypeError):
+                        pass
+                else:
+                    # String fields
+                    clean_value = str(value).strip('"')
+                    if clean_value and clean_value != 'null':
+                        mapped[metadata_field] = clean_value
+        
+        return mapped
     
     def _identify_missing_attributes(self, llm_data: Dict[str, Any]) -> List[str]:
         """Identify which attributes are missing from LLM data"""
         missing = []
         
-        core_attributes = ['description', 'group', 'item_year']
-        enhancement_attributes = ['reference_url', 'image_url']
+        core_attributes = ['group', 'item_year']
+        enhancement_attributes = ['reference_url', 'image_url', 'item_year_to']
         
         for attr in core_attributes:
             if not llm_data.get(attr):
                 missing.append(attr)
         
-        # Always try to get enhancement attributes from web
+        # Always try to get enhancement attributes
         missing.extend(enhancement_attributes)
         
         return missing
@@ -250,11 +436,11 @@ class ItemMetadataService:
     def _combine_research_results(
         self, 
         llm_result: Dict[str, Any], 
-        web_result: Dict[str, Any], 
+        gemini_result: Dict[str, Any], 
         category: CategoryEnum, 
         subcategory: str
     ) -> Dict[str, Any]:
-        """Combine LLM and web research results with LLM as primary source"""
+        """Combine LLM and Gemini research results with LLM as primary source"""
         
         combined = {
             'description': None,
@@ -265,45 +451,43 @@ class ItemMetadataService:
             'image_url': None,
             'llm_confidence': 0,
             'web_sources_found': 0,
-            'research_method': 'llm_primary_web_enhancement',
+            'research_method': 'llm_primary_gemini_enhancement',
             'research_errors': []
         }
         
         # Collect errors
         if 'llm_error' in llm_result:
             combined['research_errors'].append(f"LLM: {llm_result['llm_error']}")
-        if 'web_error' in web_result:
-            combined['research_errors'].append(f"Web: {web_result['web_error']}")
+        if 'gemini_error' in gemini_result:
+            combined['research_errors'].append(f"Gemini: {gemini_result['gemini_error']}")
         
         # Primary confidence is from LLM
         llm_confidence = llm_result.get('llm_confidence', 0)
-        web_confidence = web_result.get('web_confidence', 0)
+        gemini_confidence = gemini_result.get('gemini_confidence', 0)
         
-        # LLM is primary source, web only adds to confidence if it fills gaps
+        # LLM is primary source, Gemini only adds to confidence if it fills gaps
         combined['llm_confidence'] = llm_confidence
-        if web_confidence > 0 and web_result.get('web_data'):
-            combined['llm_confidence'] = min(llm_confidence + 5, 95)  # Small boost for web enhancement
+        if gemini_confidence > 0 and gemini_result.get('gemini_data'):
+            combined['llm_confidence'] = min(llm_confidence + 10, 95)  # Boost for Gemini enhancement
         
-        combined['web_sources_found'] = 1 if web_confidence > 0 else 0
+        combined['web_sources_found'] = 1 if gemini_confidence > 0 else 0
         
         # Combine data with LLM as primary
         llm_data = llm_result.get('llm_data', {})
-        web_data = web_result.get('web_data', {})
+        gemini_data = gemini_result.get('gemini_data', {})
         
-        # Use LLM data first, fill gaps with web data
-        combined['description'] = llm_data.get('description') or web_data.get('description')
-        combined['group'] = llm_data.get('group') or web_data.get('group')
-        combined['item_year'] = llm_data.get('item_year') or web_data.get('item_year')
-        combined['item_year_to'] = llm_data.get('item_year_to') or web_data.get('item_year_to')
-        
-        # Web-only attributes
-        combined['reference_url'] = web_data.get('reference_url')
-        combined['image_url'] = web_data.get('image_url')
+        # Use LLM data first, fill gaps with Gemini data
+        combined['description'] = llm_data.get('description') or gemini_data.get('description')
+        combined['group'] = llm_data.get('group') or gemini_data.get('group')
+        combined['item_year'] = llm_data.get('item_year') or gemini_data.get('item_year')
+        combined['item_year_to'] = llm_data.get('item_year_to') or gemini_data.get('item_year_to')
+        combined['reference_url'] = llm_data.get('reference_url') or gemini_data.get('reference_url')
+        combined['image_url'] = llm_data.get('image_url') or gemini_data.get('image_url')
         
         # Add metadata about sources used
-        combined['primary_source'] = 'llm_training_data'
-        combined['enhancement_source'] = 'wikipedia' if web_data else None
-        combined['missing_attributes_filled'] = web_result.get('missing_attributes_found', [])
+        combined['primary_source'] = 'groq_llm'
+        combined['enhancement_source'] = 'gemini_research' if gemini_data else None
+        combined['missing_attributes_filled'] = gemini_result.get('missing_attributes_found', [])
         
         return combined
     
@@ -318,8 +502,8 @@ class ItemMetadataService:
             if self.llm_client.is_available():
                 confidence += 30  # Higher weight for LLM availability
             
-            if self.web_service._service_available:
-                confidence += 10  # Lower weight for web enhancement
+            if self.gemini_available:
+                confidence += 15  # Weight for Gemini enhancement
             
             if category in [CategoryEnum.games, CategoryEnum.sports, CategoryEnum.music]:
                 confidence += 10

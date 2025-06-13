@@ -15,7 +15,7 @@ from models.top_models.item_group import (
 from services.top.item_groups_service import item_groups_service
 
 logger = logging.getLogger(__name__)
-router = APIRouter(tags=["item-groups"])
+router = APIRouter(tags=["top-groups"])
 
 @router.get("/", response_model=List[ItemGroupWithCount])
 async def get_item_groups(
