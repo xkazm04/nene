@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Dict, Any
+from typing import  Dict, Any
 from datetime import datetime
 
 from services.llm_clients.gemini_client import gemini_client
@@ -135,13 +135,13 @@ class EnhancedWebService:
     def _create_fallback_context(self, statement: str, reason: str) -> str:
         """Create fallback context when web extraction fails"""
         return f"""
-STATEMENT: {statement}
-WEB_EXTRACTION_STATUS: Failed - {reason}
-WEB_SEARCH_TIMESTAMP: {datetime.now().isoformat()}
-CONTEXT_AVAILABLE: Limited - using training data only
-FALLBACK_NOTE: Web content extraction unavailable, relying on LLM training data for analysis
-ERROR_DETAILS: {reason}
-"""
+        STATEMENT: {statement}
+        WEB_EXTRACTION_STATUS: Failed - {reason}
+        WEB_SEARCH_TIMESTAMP: {datetime.now().isoformat()}
+        CONTEXT_AVAILABLE: Limited - using training data only
+        FALLBACK_NOTE: Web content extraction unavailable, relying on LLM training data for analysis
+        ERROR_DETAILS: {reason}
+        """
 
 # Create enhanced service instance
 gemini_service = EnhancedWebService()

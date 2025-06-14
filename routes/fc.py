@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 import logging
 import asyncio
+import time
 
 from models.transcription_models import (
     TranscriptionAnalysisInput,
@@ -68,7 +69,6 @@ async def research_statement(request: ResearchRequestAPI) -> EnhancedLLMResearch
         logger.info(f"Starting tri-factor research for statement: {request.statement[:100]}...")
         logger.info(f"Research will include: LLM data + Web search + Resource analysis")
         
-        # Execute the tri-factor research (FIXED: Direct await call)
         result = await fact_checking_core_service.process_research_request(request)
         
         # Log research completion with metadata
@@ -231,6 +231,7 @@ async def health_check():
         
         gemini_available = bool(os.getenv('GOOGLE_API_KEY'))
         firecrawl_available = bool(os.getenv('FIRECRAWL_API_KEY'))
+        twitter_api_available = bool(os.getenv('TWITTER_BEARER_TOKEN'))
         
         # Check if Firecrawl SDK is available
         try:
@@ -248,9 +249,11 @@ async def health_check():
                 "web_search": gemini_available,
                 "resource_analysis": firecrawl_available,
                 "firecrawl_sdk": firecrawl_sdk_available,
-                "tri_factor_ready": gemini_available  # Minimum requirement
+                "tri_factor_ready": gemini_available,  # Minimum requirement
+                "twitter_extraction": True,  # Always available (fallback methods)
+                "twitter_api": twitter_api_available
             },
-            "version": "tri-factor-v1.1-sdk"
+            "version": "tri-factor-v1.2-twitter"
         }
     except Exception as e:
         logger.error(f"Health check failed: {e}")
@@ -258,5 +261,5 @@ async def health_check():
             "status": "degraded",
             "service": "fact-checking", 
             "error": str(e),
-            "version": "tri-factor-v1.1-sdk"
+            "version": "tri-factor-v1.2-twitter"
         }

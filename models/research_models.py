@@ -1,6 +1,6 @@
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Union
 from enum import Enum
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, validator
 
 class StatementCategory(str, Enum):
     """Categories for statement classification."""
@@ -41,22 +41,176 @@ class ExpertPerspective(BaseModel):
     publication_date: Optional[str] = None
 
 class ResourceReference(BaseModel):
+    """Enhanced resource reference with flexible category system"""
     url: str
     title: str
-    category: Literal["mainstream", "governance", "academic", "medical", "other"]
-    country: str
-    credibility: Literal["high", "medium", "low"]
+    category: str = Field(..., description="Source category (flexible)")  # Made flexible instead of Literal
+    country: str = Field(default="unknown", description="ISO country code")
+    credibility: Literal["high", "medium", "low"] = Field(default="medium")
+    domain: Optional[str] = Field(default=None, description="Source domain extracted from URL")
+    key_finding: Optional[str] = Field(default=None, description="Key finding from this source")
+    
+    @validator('category')
+    def normalize_category(cls, v):
+        """Normalize category to standard values while allowing flexibility"""
+        if not v:
+            return "other"
+        
+        # Convert to lowercase for comparison
+        v_lower = str(v).lower().strip()
+        
+        # Map common variations to standard categories
+        category_mapping = {
+            # Government/Official
+            'government': 'governance',
+            'gov': 'governance',
+            'official': 'governance',
+            'governmental': 'governance',
+            'federal': 'governance',
+            'state': 'governance',
+            'municipal': 'governance',
+            'public': 'governance',
+            
+            # News/Media
+            'news': 'mainstream',
+            'media': 'mainstream',
+            'journalism': 'mainstream',
+            'newspaper': 'mainstream',
+            'broadcast': 'mainstream',
+            'press': 'mainstream',
+            
+            # Academic/Research
+            'university': 'academic',
+            'research': 'academic',
+            'scientific': 'academic',
+            'scholarly': 'academic',
+            'education': 'academic',
+            'institute': 'academic',
+            'college': 'academic',
+            
+            # Medical/Health
+            'health': 'medical',
+            'healthcare': 'medical',
+            'hospital': 'medical',
+            'clinic': 'medical',
+            'pharmaceutical': 'medical',
+            
+            # Economic/Financial
+            'economic': 'economic',
+            'financial': 'economic',
+            'finance': 'economic',
+            'banking': 'economic',
+            'investment': 'economic',
+            'business': 'economic',
+            'commercial': 'economic',
+            'corporate': 'economic',
+            
+            # Legal
+            'legal': 'legal',
+            'law': 'legal',
+            'court': 'legal',
+            'judicial': 'legal',
+            'attorney': 'legal',
+            
+            # Technology
+            'tech': 'technology',
+            'technological': 'technology',
+            'digital': 'technology',
+            'software': 'technology',
+            'computer': 'technology',
+            
+            # International/Global
+            'international': 'international',
+            'global': 'international',
+            'world': 'international',
+            'multilateral': 'international',
+            
+            # Think tanks/Policy
+            'think_tank': 'policy',
+            'thinktank': 'policy',
+            'policy': 'policy',
+            'advocacy': 'policy',
+            
+            # Fact-checking
+            'fact_check': 'fact_checking',
+            'factcheck': 'fact_checking',
+            'verification': 'fact_checking',
+        }
+        
+        # Return mapped category or original if not found
+        return category_mapping.get(v_lower, v_lower)
+    
+    @validator('country')
+    def normalize_country(cls, v):
+        """Normalize country codes"""
+        if not v or v.lower() in ['unknown', 'null', 'none']:
+            return "unknown"
+        
+        # Common country code mappings
+        country_mapping = {
+            'usa': 'us',
+            'united states': 'us',
+            'america': 'us',
+            'uk': 'gb',
+            'britain': 'gb',
+            'england': 'gb',
+            'united kingdom': 'gb',
+            'germany': 'de',
+            'deutschland': 'de',
+            'france': 'fr',
+            'canada': 'ca',
+            'australia': 'au',
+            'japan': 'jp',
+            'china': 'cn',
+            'india': 'in',
+            'brazil': 'br',
+            'russia': 'ru',
+            'italy': 'it',
+            'spain': 'es',
+            'netherlands': 'nl',
+            'switzerland': 'ch',
+            'sweden': 'se',
+            'norway': 'no',
+            'denmark': 'dk',
+            'finland': 'fi',
+        }
+        
+        v_lower = str(v).lower().strip()
+        return country_mapping.get(v_lower, v_lower[:2])  # Default to first 2 chars
 
 class ResourceAnalysis(BaseModel):
-    total: str  # e.g., "85%"
-    count: int
-    mainstream: int = 0
-    governance: int = 0
-    academic: int = 0
-    medical: int = 0
-    other: int = 0
-    major_countries: List[str] = []
-    references: List[ResourceReference] = []
+    """Enhanced resource analysis with flexible categorization"""
+    total: str = Field(default="0%", description="Total percentage agreement")
+    count: int = Field(default=0, description="Total number of sources")
+    
+    # Traditional categories (maintain backward compatibility)
+    mainstream: int = Field(default=0, description="Major news outlets")
+    governance: int = Field(default=0, description="Government sources")
+    academic: int = Field(default=0, description="Academic/research sources")
+    medical: int = Field(default=0, description="Medical/health sources")
+    other: int = Field(default=0, description="Other sources")
+    
+    # Extended categories (new)
+    economic: int = Field(default=0, description="Economic/financial sources")
+    legal: int = Field(default=0, description="Legal sources")
+    technology: int = Field(default=0, description="Technology sources")
+    international: int = Field(default=0, description="International organization sources")
+    policy: int = Field(default=0, description="Think tanks and policy sources")
+    fact_checking: int = Field(default=0, description="Fact-checking organizations")
+    
+    major_countries: List[str] = Field(default_factory=list, description="Major countries represented")
+    references: List[ResourceReference] = Field(default_factory=list, description="Source references")
+    
+    @validator('total')
+    def format_total_percentage(cls, v):
+        """Ensure total is properly formatted as percentage"""
+        if not v or v == "null":
+            return "0%"
+        if isinstance(v, (int, float)):
+            return f"{v}%"
+        if not str(v).endswith('%'):
+            return f"{v}%"
+        return str(v)
 
 class ResearchMetadata(BaseModel):
     """Metadata about research sources and methods used"""
@@ -67,7 +221,6 @@ class ResearchMetadata(BaseModel):
     web_recency_score: Optional[float] = None
     total_resources_analyzed: Optional[int] = None
     resource_quality_score: Optional[float] = None
-    processing_time_seconds: Optional[float] = None
 
 class LLMResearchResponse(BaseModel):
     # Core fields (backward compatible)
@@ -96,28 +249,6 @@ class LLMResearchResponse(BaseModel):
     web_findings: List[str] = []  # Findings from web search
     resource_findings: List[str] = []  # Findings from resource analysis
 
-class TriFactorResearchResult(BaseModel):
-    """Complete result from tri-factor research system"""
-    statement: str
-    original_request: LLMResearchRequest
-    final_response: LLMResearchResponse
-    
-    # Individual research results
-    llm_research: Optional[LLMResearchResponse] = None
-    web_research: Optional[dict] = None
-    resource_analysis: Optional[dict] = None
-    
-    # Processing metadata
-    total_processing_time: float
-    research_sources_used: List[str]
-    fallback_reasons: List[str] = []  # Reasons why certain sources failed
-    
-    # Quality indicators
-    overall_confidence: int  # 0-100
-    source_consensus: float  # Agreement between sources (0-1)
-    recency_score: float  # How recent the information is (0-100)
-    authority_score: float  # Authority of sources (0-100)
-
 # Helper functions for model conversion
 def convert_expert_opinion_to_perspectives(expert_opinion: ExpertOpinion) -> List[ExpertPerspective]:
     """Convert old ExpertOpinion format to new ExpertPerspective list"""
@@ -126,10 +257,9 @@ def convert_expert_opinion_to_perspectives(expert_opinion: ExpertOpinion) -> Lis
     if expert_opinion.critic:
         perspectives.append(ExpertPerspective(
             expert_name="Critical Analyst",
-            credentials="Expert in Critical Analysis",
             stance="NEUTRAL",
             reasoning=expert_opinion.critic,
-            summary="One sentence summary of critical analysis",
+            summary="Critical analysis perspective",
             confidence_level=75.0,
             source_type="llm",
             expertise_area="Critical Analysis"
@@ -138,10 +268,9 @@ def convert_expert_opinion_to_perspectives(expert_opinion: ExpertOpinion) -> Lis
     if expert_opinion.devil:
         perspectives.append(ExpertPerspective(
             expert_name="Devil's Advocate",
-            credentials="Expert in Counter-Arguments",
             stance="OPPOSING",
             reasoning=expert_opinion.devil,
-            summary="One sentence summary of counter-arguments",
+            summary="Counter-argument perspective",
             confidence_level=70.0,
             source_type="llm",
             expertise_area="Counter-Analysis"
@@ -150,10 +279,9 @@ def convert_expert_opinion_to_perspectives(expert_opinion: ExpertOpinion) -> Lis
     if expert_opinion.nerd:
         perspectives.append(ExpertPerspective(
             expert_name="Technical Expert",
-            credentials="Technical/Scientific Expert",
             stance="NEUTRAL",
             reasoning=expert_opinion.nerd,
-            summary="One sentence summary of technical analysis",
+            summary="Technical analysis perspective",
             confidence_level=85.0,
             source_type="llm",
             expertise_area="Technical Analysis"
@@ -162,10 +290,9 @@ def convert_expert_opinion_to_perspectives(expert_opinion: ExpertOpinion) -> Lis
     if expert_opinion.psychic:
         perspectives.append(ExpertPerspective(
             expert_name="Predictive Analyst",
-            credentials="Expert in Future Implications",
             stance="NEUTRAL",
             reasoning=expert_opinion.psychic,
-            summary="One sentence summary of future implications",
+            summary="Future implications perspective",
             confidence_level=60.0,
             source_type="llm",
             expertise_area="Predictive Analysis"
@@ -192,5 +319,4 @@ def create_research_metadata(
         web_recency_score=web_recency,
         total_resources_analyzed=resource_count,
         resource_quality_score=resource_quality,
-        processing_time_seconds=processing_time
     )

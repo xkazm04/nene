@@ -50,21 +50,29 @@ async def get_groups_by_category(
     category: CategoryEnum,
     subcategory: Optional[str] = Query(None, description="Filter by subcategory"),
     search: Optional[str] = Query(None, description="Search in group names"),
-    limit: int = Query(50, ge=1, le=200, description="Number of results to return")
+    limit: int = Query(100, ge=1, le=200, description="Number of results to return"),
+    min_item_count: int = Query(1, ge=0, description="Minimum number of items in group")
 ):
-    """Get item groups for a specific category"""
+    """Get item groups for a specific category with minimum item count filtering"""
     try:
-        logger.info(f"Fetching groups for category: {category}, subcategory: {subcategory}")
+        logger.info(f"Fetching groups for category: {category}, subcategory: {subcategory}, min_item_count: {min_item_count}")
         
         groups = await item_groups_service.get_groups_by_category(
             category=category.value,
             subcategory=subcategory,
             search=search,
-            limit=limit
+            limit=limit,
+            min_item_count=min_item_count  
         )
         
-        logger.info(f"Found {len(groups)} groups for category {category}")
-        return groups
+        # Additional server-side filtering to ensure data quality (backup)
+        filtered_groups = [
+            group for group in groups 
+            if group.item_count >= min_item_count and group.category == category.value
+        ]
+        
+        logger.info(f"Found {len(filtered_groups)} groups for category {category} (filtered from {len(groups)})")
+        return filtered_groups
         
     except Exception as e:
         logger.error(f"Failed to fetch groups for category {category}: {e}")

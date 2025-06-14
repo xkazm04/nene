@@ -1,6 +1,6 @@
 from typing import List, Optional
 from pydantic import BaseModel
-from models.statement_categories import StatementCategory
+from models.research_models import StatementCategory
 from models.video_models import EnhancedFactCheckStatementWithTimestamp
 
 class TranscriptionAnalysisInput(BaseModel):

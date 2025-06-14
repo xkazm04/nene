@@ -13,7 +13,7 @@ from models.transcription_models import (
     EnhancedTranscriptionAnalysisResult
 )
 from models.video_models import EnhancedFactCheckStatementWithTimestamp, TimestampEstimate
-from models.statement_categories import StatementCategory
+from models.research_models import StatementCategory
 from prompts.transcription_prompts import TranscriptionAnalysisPrompts
 from services.media.video_service import video_service
 from models.processing_models import ProcessingUpdate, ProcessingStatus

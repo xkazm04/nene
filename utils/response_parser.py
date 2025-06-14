@@ -14,12 +14,12 @@ from models.research_models import (
 logger = logging.getLogger(__name__)
 
 class ResponseParser:
-    """Enhanced parser for LLM responses with expert perspectives support"""
+    """Enhanced parser for LLM responses with flexible resource categorization"""
     
     def create_response_object(self, parsed_response: Dict[str, Any], request: LLMResearchRequest) -> LLMResearchResponse:
         """
         Create LLMResearchResponse object from parsed JSON response.
-        Enhanced to properly handle expert_perspectives from LLM output.
+        Enhanced to handle flexible resource categories.
         
         Args:
             parsed_response: Parsed JSON response from LLM
@@ -29,7 +29,7 @@ class ResponseParser:
             LLMResearchResponse object
         """
         try:
-            logger.debug("Creating response object with expert perspectives support")
+            logger.debug("Creating response object with enhanced resource categorization")
             
             # Parse basic fields
             valid_sources = parsed_response.get("valid_sources", "")
@@ -42,17 +42,12 @@ class ResponseParser:
             # Parse legacy expert opinions
             experts = self._parse_expert_opinions(parsed_response.get("experts", {}))
             
-            # Parse NEW expert perspectives from LLM response
+            # Parse expert perspectives from LLM response
             expert_perspectives = self._parse_expert_perspectives(parsed_response.get("expert_perspectives", []))
             
-            # If no expert_perspectives but we have legacy experts, convert them
-            if not expert_perspectives and experts:
-                expert_perspectives = self._convert_legacy_experts_to_perspectives(experts)
-                logger.info(f"Converted {len(expert_perspectives)} legacy expert opinions to perspectives")
-            
-            # Parse resource analysis
-            resources_agreed = self._parse_resource_analysis(parsed_response.get("resources_agreed", {}))
-            resources_disagreed = self._parse_resource_analysis(parsed_response.get("resources_disagreed", {}))
+            # Parse resource analysis with enhanced error handling
+            resources_agreed = self._parse_resource_analysis_enhanced(parsed_response.get("resources_agreed", {}))
+            resources_disagreed = self._parse_resource_analysis_enhanced(parsed_response.get("resources_disagreed", {}))
             
             # Parse category
             if category and isinstance(category, str):
@@ -72,18 +67,25 @@ class ResponseParser:
                 resources_agreed=resources_agreed,
                 resources_disagreed=resources_disagreed,
                 experts=experts,
-                expert_perspectives=expert_perspectives,  # Properly set expert perspectives
+                expert_perspectives=expert_perspectives,
                 research_method="LLM Research",
                 profile_id=request.profile_id,
-                research_summary=verdict,  # Use verdict as initial summary
+                research_summary=verdict,
                 confidence_score=self._calculate_confidence_score(parsed_response, expert_perspectives)
             )
             
             logger.info(f"Created response object with {len(expert_perspectives)} expert perspectives")
+            if resources_agreed:
+                logger.info(f"Resources agreed: {resources_agreed.count} sources")
+            if resources_disagreed:
+                logger.info(f"Resources disagreed: {resources_disagreed.count} sources")
+            
             return response
             
         except Exception as e:
             logger.error(f"Failed to create response object: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             logger.error(f"Parsed response keys: {list(parsed_response.keys())}")
             
             # Create minimal fallback response
@@ -93,20 +95,100 @@ class ResponseParser:
                 status="UNVERIFIABLE",
                 research_method="LLM Research (Error)",
                 profile_id=request.profile_id,
-                expert_perspectives=[],  # Empty list for failed parsing
+                expert_perspectives=[],
                 confidence_score=30
             )
     
-    def _parse_expert_perspectives(self, perspectives_data: List[Dict[str, Any]]) -> List[ExpertPerspective]:
-        """
-        Parse expert perspectives from LLM response.
+    def _parse_resource_analysis_enhanced(self, resource_data: Dict[str, Any]) -> Optional[ResourceAnalysis]:
+        """Enhanced resource analysis parsing with flexible category handling"""
+        if not resource_data:
+            return None
         
-        Args:
-            perspectives_data: List of expert perspective dictionaries from LLM
+        try:
+            # Parse references with enhanced error handling
+            references = []
+            for i, ref_data in enumerate(resource_data.get("references", [])):
+                try:
+                    if isinstance(ref_data, dict):
+                        # Create reference with flexible validation
+                        reference = ResourceReference(
+                            url=ref_data.get("url", ""),
+                            title=ref_data.get("title", ""),
+                            category=ref_data.get("category", "other"),  # Will be normalized by validator
+                            country=ref_data.get("country", "unknown"),  # Will be normalized by validator
+                            credibility=ref_data.get("credibility", "medium"),
+                            key_finding=ref_data.get("key_finding")
+                        )
+                        references.append(reference)
+                        logger.debug(f"Successfully parsed reference: {reference.title} ({reference.category})")
+                        
+                except Exception as ref_error:
+                    logger.warning(f"Failed to parse reference {i}: {ref_error}")
+                    logger.debug(f"Reference data: {ref_data}")
+                    continue
             
-        Returns:
-            List of ExpertPerspective objects
-        """
+            # Count categories dynamically from references
+            category_counts = self._count_categories_from_references(references)
+            
+            # Create resource analysis with dynamic counts
+            resource_analysis = ResourceAnalysis(
+                total=resource_data.get("total", "0%"),
+                count=resource_data.get("count", len(references)),
+                
+                # Traditional categories
+                mainstream=category_counts.get("mainstream", 0),
+                governance=category_counts.get("governance", 0),
+                academic=category_counts.get("academic", 0),
+                medical=category_counts.get("medical", 0),
+                other=category_counts.get("other", 0),
+                
+                # Extended categories
+                economic=category_counts.get("economic", 0),
+                legal=category_counts.get("legal", 0),
+                technology=category_counts.get("technology", 0),
+                international=category_counts.get("international", 0),
+                policy=category_counts.get("policy", 0),
+                fact_checking=category_counts.get("fact_checking", 0),
+                
+                major_countries=self._extract_major_countries(references),
+                references=references
+            )
+            
+            logger.info(f"Successfully parsed resource analysis with {len(references)} references")
+            logger.debug(f"Category breakdown: {category_counts}")
+            
+            return resource_analysis
+            
+        except Exception as e:
+            logger.error(f"Failed to parse resource analysis: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return None
+    
+    def _count_categories_from_references(self, references: List[ResourceReference]) -> Dict[str, int]:
+        """Count categories dynamically from parsed references"""
+        category_counts = {}
+        
+        for ref in references:
+            category = ref.category
+            category_counts[category] = category_counts.get(category, 0) + 1
+        
+        return category_counts
+    
+    def _extract_major_countries(self, references: List[ResourceReference]) -> List[str]:
+        """Extract major countries from references"""
+        countries = {}
+        
+        for ref in references:
+            if ref.country and ref.country != "unknown":
+                countries[ref.country] = countries.get(ref.country, 0) + 1
+        
+        # Return countries with 2+ sources, sorted by count
+        major_countries = [country for country, count in countries.items() if count >= 2]
+        return sorted(major_countries, key=lambda x: countries[x], reverse=True)
+    
+    def _parse_expert_perspectives(self, perspectives_data: List[Dict[str, Any]]) -> List[ExpertPerspective]:
+        """Parse expert perspectives from LLM response"""
         perspectives = []
         
         if not perspectives_data or not isinstance(perspectives_data, list):
@@ -161,72 +243,6 @@ class ResponseParser:
         logger.info(f"Successfully parsed {len(perspectives)} expert perspectives")
         return perspectives
     
-    def _convert_legacy_experts_to_perspectives(self, experts: ExpertOpinion) -> List[ExpertPerspective]:
-        """
-        Convert legacy ExpertOpinion to ExpertPerspective objects.
-        
-        Args:
-            experts: Legacy ExpertOpinion object
-            
-        Returns:
-            List of ExpertPerspective objects
-        """
-        perspectives = []
-        
-        # Convert CRITIC
-        if experts.critic:
-            perspectives.append(ExpertPerspective(
-                expert_name="Critical Analyst",
-                stance="NEUTRAL",
-                reasoning=experts.critic,
-                confidence_level=75.0,
-                summary="Critical analysis of the statement",
-                source_type="llm",
-                expertise_area="Critical Analysis",
-                publication_date=None
-            ))
-        
-        # Convert DEVIL
-        if experts.devil:
-            perspectives.append(ExpertPerspective(
-                expert_name="Devil's Advocate",
-                stance="OPPOSING",
-                reasoning=experts.devil,
-                confidence_level=70.0,
-                summary="Counter-arguments to the statement",
-                source_type="llm",
-                expertise_area="Counter-Analysis",
-                publication_date=None
-            ))
-        
-        # Convert NERD
-        if experts.nerd:
-            perspectives.append(ExpertPerspective(
-                expert_name="Technical Expert",
-                stance="SUPPORTING",  # Usually data-driven, tends to support if evidence exists
-                reasoning=experts.nerd,
-                confidence_level=85.0,
-                summary="Technical/statistical analysis of the statement",
-                source_type="llm",
-                expertise_area="Technical/Statistical Analysis",
-                publication_date=None
-            ))
-        
-        # Convert PSYCHIC
-        if experts.psychic:
-            perspectives.append(ExpertPerspective(
-                expert_name="Predictive Analyst",
-                stance="NEUTRAL",
-                reasoning=experts.psychic,
-                confidence_level=60.0,
-                summary="Future implications and predictions based on the statement",
-                source_type="llm",
-                expertise_area="Psychological/Motivational Analysis",
-                publication_date=None
-            ))
-        
-        return perspectives
-    
     def _parse_expert_opinions(self, experts_data: Dict[str, Any]) -> Optional[ExpertOpinion]:
         """Parse legacy expert opinions format"""
         if not experts_data:
@@ -241,40 +257,6 @@ class ResponseParser:
             )
         except Exception as e:
             logger.warning(f"Failed to parse expert opinions: {e}")
-            return None
-    
-    def _parse_resource_analysis(self, resource_data: Dict[str, Any]) -> Optional[ResourceAnalysis]:
-        """Parse resource analysis data"""
-        if not resource_data:
-            return None
-        
-        try:
-            # Parse references
-            references = []
-            for ref_data in resource_data.get("references", []):
-                if isinstance(ref_data, dict):
-                    reference = ResourceReference(
-                        url=ref_data.get("url", ""),
-                        title=ref_data.get("title", ""),
-                        category=ref_data.get("category", "other"),
-                        country=ref_data.get("country", "unknown"),
-                        credibility=ref_data.get("credibility", "medium")
-                    )
-                    references.append(reference)
-            
-            return ResourceAnalysis(
-                total=resource_data.get("total", "0%"),
-                count=resource_data.get("count", 0),
-                mainstream=resource_data.get("mainstream", 0),
-                governance=resource_data.get("governance", 0),
-                academic=resource_data.get("academic", 0),
-                medical=resource_data.get("medical", 0),
-                other=resource_data.get("other", 0),
-                major_countries=resource_data.get("major_countries", []),
-                references=references
-            )
-        except Exception as e:
-            logger.warning(f"Failed to parse resource analysis: {e}")
             return None
     
     def _calculate_confidence_score(self, parsed_response: Dict[str, Any], expert_perspectives: List[ExpertPerspective]) -> int:
@@ -297,7 +279,7 @@ class ResponseParser:
         # Boost based on average expert confidence
         if expert_perspectives:
             avg_expert_confidence = sum(p.confidence_level for p in expert_perspectives) / len(expert_perspectives)
-            confidence_boost = (avg_expert_confidence - 50) * 0.2  # Scale to reasonable range
+            confidence_boost = (avg_expert_confidence - 50) * 0.2
             base_confidence += int(confidence_boost)
         
         # Boost based on resource count
@@ -309,6 +291,18 @@ class ResponseParser:
         base_confidence += resource_boost
         
         return max(30, min(95, base_confidence))
+
+    def create_error_response(self, request: LLMResearchRequest, error_message: str) -> LLMResearchResponse:
+        """Create error response when processing fails"""
+        return LLMResearchResponse(
+            valid_sources="0 (Error occurred during processing)",
+            verdict=f"Processing failed: {error_message}",
+            status="UNVERIFIABLE",
+            research_method="Error Recovery",
+            profile_id=request.profile_id,
+            expert_perspectives=[],
+            confidence_score=20
+        )
 
 # Create parser instance
 response_parser = ResponseParser()

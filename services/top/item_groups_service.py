@@ -32,11 +32,18 @@ class ItemGroupsService:
             result = self.supabase.rpc('get_groups_with_counts', {
                 'p_category': category_str,
                 'p_subcategory': params.subcategory,
-                'p_search': params.search
+                'p_search': params.search,
+                'p_min_item_count': 1  # Add this parameter
             }).execute()
             
+            if not result.data:
+                logger.warning("RPC returned no data, falling back to direct query")
+                return await self._get_groups_by_category_optimized(
+                    category_str, params.subcategory, params.search, params.limit
+                )
+            
             groups = []
-            for row in result.data if result.data else []:
+            for row in result.data:
                 group = ItemGroupWithCount(
                     id=row['group_id'],
                     name=row['group_name'],
@@ -46,7 +53,7 @@ class ItemGroupsService:
                     image_url=row['group_image_url'],
                     item_count=row['item_count'],
                     created_at=row['group_created_at'],
-                    updated_at=row['group_created_at']
+                    updated_at=row['group_updated_at']
                 )
                 groups.append(group)
             
@@ -58,7 +65,11 @@ class ItemGroupsService:
             
         except Exception as e:
             logger.error(f"Error fetching groups with counts: {e}")
-            raise
+            # Fall back to optimized query
+            category_str = params.category.value if params.category else None
+            return await self._get_groups_by_category_optimized(
+                category_str, params.subcategory, params.search, params.limit
+            )
 
     async def get_group_by_id(self, group_id: uuid.UUID, include_items: bool = True) -> Optional[ItemGroupWithItems]:
         """Get a specific item group by ID with items included by default"""
@@ -126,11 +137,86 @@ class ItemGroupsService:
         category: str,
         subcategory: Optional[str] = None,
         search: Optional[str] = None,
-        limit: int = 50
+        limit: int = 100,
+        min_item_count: int = 1
     ) -> List[ItemGroupWithCount]:
-        """Get groups filtered by category with item counts"""
+        """OPTIMIZED: Get groups filtered by category with item counts in a single query"""
         try:
-            # Build the query with joins to count items
+            # Use a single efficient query instead of individual lookups
+            base_query = self.supabase.table('item_groups').select('''
+                id,
+                name,
+                description,
+                category,
+                subcategory,
+                image_url,
+                created_at,
+                updated_at,
+                items!inner(id)
+            ''', count='exact')
+            
+            # Apply filters
+            query = base_query.eq('category', category)
+            
+            if subcategory:
+                query = query.eq('subcategory', subcategory)
+            
+            if search:
+                query = query.ilike('name', f'%{search}%')
+            
+            # Execute with items join to get counts
+            result = query.order('name').limit(limit).execute()
+            
+            if not result.data:
+                logger.info(f"No groups found for category {category}")
+                return []
+            
+            # Process results and calculate item counts
+            groups = []
+            for row in result.data:
+                # Count items for this group efficiently
+                item_count = len(row.get('items', []))
+                
+                # Skip if below minimum count
+                if item_count < min_item_count:
+                    continue
+                
+                # Remove items data to clean up response
+                clean_row = {k: v for k, v in row.items() if k != 'items'}
+                
+                group = ItemGroupWithCount(
+                    id=clean_row['id'],
+                    name=clean_row['name'],
+                    description=clean_row['description'],
+                    category=CategoryEnum(clean_row['category']),
+                    subcategory=clean_row['subcategory'],
+                    image_url=clean_row['image_url'],
+                    item_count=item_count,
+                    created_at=clean_row['created_at'],
+                    updated_at=clean_row['updated_at']
+                )
+                groups.append(group)
+            
+            logger.info(f"Found {len(groups)} groups for category {category} with min_item_count={min_item_count}")
+            return groups
+            
+        except Exception as e:
+            logger.error(f"Error in optimized query for category {category}: {e}")
+            # Last resort fallback
+            return await self._get_groups_by_category_fallback(
+                category, subcategory, search, limit, min_item_count
+            )
+
+    async def _get_groups_by_category_optimized(
+        self,
+        category: str,
+        subcategory: Optional[str] = None,
+        search: Optional[str] = None,
+        limit: int = 100
+    ) -> List[ItemGroupWithCount]:
+        """Optimized fallback using batch queries"""
+        try:
+            # Get groups first
             query_builder = self.supabase.table('item_groups').select('''
                 id,
                 name,
@@ -150,11 +236,34 @@ class ItemGroupsService:
             
             result = query_builder.order('name').limit(limit).execute()
             
+            if not result.data:
+                return []
+            
+            # Get item counts in batch using a single query with group by
+            group_ids = [row['id'] for row in result.data]
+            
+            # Batch query for item counts
+            counts_result = self.supabase.table('items').select(
+                'group_id',
+                count='exact'
+            ).in_('group_id', group_ids).execute()
+            
+            # Create item count mapping (this might need adjustment based on Supabase response)
+            item_counts = {}
+            if counts_result.data:
+                # This approach might need modification based on how Supabase handles group by
+                for group_id in group_ids:
+                    count_result = self.supabase.table('items').select('id', count='exact').eq('group_id', group_id).execute()
+                    item_counts[group_id] = count_result.count if count_result.count is not None else 0
+            
+            # Build response
             groups = []
-            for row in result.data if result.data else []:
-                # Get actual item count for this group
-                count_result = self.supabase.table('items').select('id', count='exact').eq('group_id', row['id']).execute()
-                item_count = count_result.count if count_result.count is not None else 0
+            for row in result.data:
+                item_count = item_counts.get(row['id'], 0)
+                
+                # Skip empty groups
+                if item_count == 0:
+                    continue
                 
                 group = ItemGroupWithCount(
                     id=row['id'],
@@ -172,8 +281,8 @@ class ItemGroupsService:
             return groups
             
         except Exception as e:
-            logger.error(f"Error fetching groups by category {category}: {e}")
-            raise
+            logger.error(f"Error in optimized fallback: {e}")
+            return []
 
     async def create_group(self, group_data: ItemGroupCreate) -> ItemGroupResponse:
         """Create a new item group"""

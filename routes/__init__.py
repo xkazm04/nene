@@ -12,6 +12,7 @@ from routes.top.top_groups import router as item_groups_router
 from routes.video import router as video_detail_router
 from routes.edu import router as edu_router
 from routes.top.wiki import router as wiki_router
+from routes.x import router as x_router
 
 from fastapi import APIRouter
 
@@ -31,3 +32,4 @@ api_router.include_router(item_groups_router, prefix="/top/groups", tags=["top-g
 api_router.include_router(item_research_router, prefix="/top/research", tags=["top-research"])
 api_router.include_router(edu_router, prefix="/edu", tags=["education"])
 api_router.include_router(wiki_router, prefix="/wiki", tags=["wiki"])
+api_router.include_router(x_router, prefix="/x", tags=["twitter-x"])

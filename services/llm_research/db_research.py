@@ -78,7 +78,7 @@ class DatabaseResearchService:
                 'resources_agreed': self._serialize_resource_analysis(llm_result.resources_agreed),
                 'resources_disagreed': self._serialize_resource_analysis(llm_result.resources_disagreed),
                 'experts': self._serialize_expert_opinions(llm_result.experts),
-                'expert_perspectives': expert_perspectives_json,  # NEW FIELD
+                'expert_perspectives': expert_perspectives_json, 
                 'processed_at': datetime.utcnow().isoformat(),
                 'created_at': datetime.utcnow().isoformat(),
                 'updated_at': datetime.utcnow().isoformat()

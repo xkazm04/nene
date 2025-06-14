@@ -1,7 +1,7 @@
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel
-from models.statement_categories import StatementCategory
+from models.research_models import StatementCategory
 
 class VideoTimestamp(BaseModel):
     """Model for video timestamp with statement."""

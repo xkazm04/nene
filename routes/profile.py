@@ -7,7 +7,6 @@ from services.profile import (
     ProfileUpdate, 
     ProfileResponse
 )
-from services.llm_research.db_research import db_research_service
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -190,96 +189,5 @@ async def search_profiles(
         
     except Exception as e:
         error_msg = f"Failed to search profiles: {str(e)}"
-        logger.error(error_msg)
-        raise HTTPException(status_code=500, detail=error_msg)
-
-@router.get("/{profile_id}/statements")
-async def get_profile_statements(
-    profile_id: str,
-    limit: int = Query(50, ge=1, le=100, description="Maximum results to return"),
-    offset: int = Query(0, ge=0, description="Number of results to skip")
-):
-    """
-    Get research statements for a specific profile.
-    
-    Args:
-        profile_id: Profile UUID
-        limit: Maximum results to return
-        offset: Number of results to skip
-        
-    Returns:
-        Dict with statements and metadata
-    """
-    try:
-        logger.info(f"Getting statements for profile: {profile_id}")
-        
-        # Check if profile exists
-        profile = profile_service.get_profile_by_id(profile_id)
-        if not profile:
-            raise HTTPException(status_code=404, detail="Profile not found")
-        
-        # Get statements for the profile
-        statements = db_research_service.get_profile_statements(profile_id, limit, offset)
-        
-        logger.info(f"Found {len(statements)} statements for profile {profile_id}")
-        return {
-            "profile_id": profile_id,
-            "profile_name": profile.name,
-            "statements": statements,
-            "count": len(statements),
-            "limit": limit,
-            "offset": offset
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        error_msg = f"Failed to get statements for profile: {str(e)}"
-        logger.error(error_msg)
-        raise HTTPException(status_code=500, detail=error_msg)
-
-@router.get("/stats/summary")
-async def get_profile_stats():
-    """
-    Get profile statistics summary.
-    
-    Returns:
-        Dict with profile statistics
-    """
-    try:
-        logger.info("Retrieving profile statistics")
-        
-        # Get basic stats using search with no filters
-        all_profiles = profile_service.search_profiles(limit=1000)  # Get a large number for stats
-        
-        total_profiles = len(all_profiles)
-        countries = set()
-        parties = set()
-        
-        for profile in all_profiles:
-            if profile.country:
-                countries.add(profile.country)
-            if profile.party:
-                parties.add(profile.party)
-        
-        # Get research analytics
-        research_stats = db_research_service.get_analytics_summary()
-        
-        stats = {
-            "total_profiles": total_profiles,
-            "unique_countries": len(countries),
-            "unique_parties": len(parties),
-            "countries": sorted(list(countries)),
-            "parties": sorted(list(parties)),
-            "total_statements": research_stats.get("total_statements", 0),
-            "linked_statements": research_stats.get("linked_to_profiles", 0),
-            "unlinked_statements": research_stats.get("total_statements", 0) - research_stats.get("linked_to_profiles", 0)
-        }
-        
-        logger.info(f"Profile statistics: {stats}")
-        return stats
-        
-    except Exception as e:
-        error_msg = f"Failed to retrieve profile statistics: {str(e)}"
         logger.error(error_msg)
         raise HTTPException(status_code=500, detail=error_msg)
