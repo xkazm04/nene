@@ -29,6 +29,7 @@ def parse_research_response(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "country": row.get('country'),
             "category": row.get('category'),
             "valid_sources": row.get('valid_sources'),
+            "profile_id": row.get('profile_id'),
             "verdict": row.get('verdict'),
             "status": row.get('status'),
             "correction": row.get('correction'),
@@ -53,6 +54,7 @@ async def get_research_results(
     category: Optional[str] = Query(default=None, description="Filter by category"),
     country: Optional[str] = Query(default=None, description="Filter by country code"),
     source: Optional[str] = Query(default=None, description="Filter by source"),
+    profile_id: Optional[str] = Query(default=None, description="Filter by profile ID"),
     date_from: Optional[str] = Query(default=None, description="Filter by statement date from (YYYY-MM-DD)"),
     date_to: Optional[str] = Query(default=None, description="Filter by statement date to (YYYY-MM-DD)"),
     processed_from: Optional[str] = Query(default=None, description="Filter by processed date from (YYYY-MM-DD)"),
@@ -97,6 +99,9 @@ async def get_research_results(
         
         if source:
             query = query.ilike('source', f'%{source}%')
+        
+        if profile_id:
+            query = query.eq('profile_id', profile_id)
         
         # Date filtering
         if date_from:
@@ -345,75 +350,3 @@ async def get_research_stats():
     except Exception as e:
         logger.error(f"Error getting research stats: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get statistics: {str(e)}")
-
-@router.get("/categories/available")
-@cache(expire=1800)  # Cache for 30 minutes
-async def get_available_categories():
-    """
-    Get all available categories from research results.
-    """
-    try:
-        result = supabase.table('research_results').select('category').execute()
-        
-        if not result.data:
-            return []
-        
-        # Get unique categories, excluding null values
-        categories = list(set([
-            row['category'] for row in result.data 
-            if row.get('category') is not None
-        ]))
-        
-        # Return sorted list with category counts
-        category_stats = {}
-        for row in result.data:
-            if row.get('category'):
-                category_stats[row['category']] = category_stats.get(row['category'], 0) + 1
-        
-        return [
-            {
-                "category": category,
-                "count": category_stats.get(category, 0)
-            }
-            for category in sorted(categories)
-        ]
-        
-    except Exception as e:
-        logger.error(f"Error getting available categories: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to get categories")
-
-@router.get("/countries/available")
-@cache(expire=1800)  # Cache for 30 minutes
-async def get_available_countries():
-    """
-    Get all available countries from research results.
-    """
-    try:
-        result = supabase.table('research_results').select('country').execute()
-        
-        if not result.data:
-            return []
-        
-        # Get unique countries, excluding null values
-        countries = list(set([
-            row['country'] for row in result.data 
-            if row.get('country') is not None
-        ]))
-        
-        # Return sorted list with country counts
-        country_stats = {}
-        for row in result.data:
-            if row.get('country'):
-                country_stats[row['country']] = country_stats.get(row['country'], 0) + 1
-        
-        return [
-            {
-                "country": country,
-                "count": country_stats.get(country, 0)
-            }
-            for country in sorted(countries)
-        ]
-        
-    except Exception as e:
-        logger.error(f"Error getting available countries: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to get countries")

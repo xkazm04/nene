@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field, validator
-from typing import Optional, List, Dict, Any
+from typing import Optional
 from datetime import datetime
+from schemas.research import EnhancedLLMResearchResponse
 
 class TwitterResearchRequest(BaseModel):
     """Request model for Twitter research endpoints"""
@@ -36,9 +37,18 @@ class TwitterExtractionResponse(BaseModel):
     reply_count: Optional[int] = None
     extraction_method: str
 
-class TwitterResearchResponse(BaseModel):
-    """Response model for Twitter research results"""
+# DEPRECATED: Use EnhancedLLMResearchResponse directly instead
+class TwitterResearchResponseSync(BaseModel):
+    """
+    DEPRECATED: Legacy response model for Twitter research results
+    Use EnhancedLLMResearchResponse directly for consistency with fc.py
+    """
     tweet_data: TwitterExtractionResponse
-    research_result: Dict[str, Any]
+    research_result: EnhancedLLMResearchResponse
     research_method: str
+    
+    class Config:
+        deprecated = True
 
+# Legacy alias for backward compatibility
+TwitterResearchResponse = TwitterResearchResponseSync

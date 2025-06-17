@@ -2,11 +2,11 @@ from fastapi import APIRouter, HTTPException
 import logging
 import time
 
-from schemas.research import ResearchRequestAPI
+from schemas.research import ResearchRequestAPI, EnhancedLLMResearchResponse
 from schemas.twitter import (
     TwitterResearchRequest,
     TwitterExtractionResponse,
-    TwitterResearchResponse,
+    TwitterResearchResponseSync 
 )
 from services.core import fact_checking_core_service
 from services.twitter.twitter_extractor import twitter_extractor_service
@@ -15,23 +15,25 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["twitter-x"])
 
-@router.post("/research", response_model=TwitterResearchResponse)
-async def research_twitter_statement(request: TwitterResearchRequest) -> TwitterResearchResponse:
+@router.post("/research", response_model=EnhancedLLMResearchResponse)
+async def research_twitter_statement(request: TwitterResearchRequest) -> EnhancedLLMResearchResponse:
     """
     Research a statement from a Twitter/X tweet using the enhanced tri-factor fact-checking service.
+    
+    **Returns the same EnhancedLLMResearchResponse format as /fc/research for consistency.**
     
     **Limitations**: Free tier = 1 request per 15 minutes.
     
     This endpoint:
     1. Extracts tweet content, username, and metadata from the provided URL
     2. Runs the extracted tweet content through the tri-factor research pipeline
-    3. Returns both the tweet data and the research results
+    3. Returns the same research format as regular quote analysis
     
     Args:
         request: Twitter research request containing tweet URL and optional context
         
     Returns:
-        TwitterResearchResponse: Tweet data and research results
+        EnhancedLLMResearchResponse: Same format as /fc/research endpoint
         
     Raises:
         HTTPException: If tweet extraction or research fails
@@ -60,13 +62,13 @@ async def research_twitter_statement(request: TwitterResearchRequest) -> Twitter
         
         logger.info(f"Successfully extracted tweet from @{tweet_data.username}: {tweet_data.content[:100]}...")
         
-        # Step 3: Prepare research request
+        # Step 3: Prepare research request using same format as fc.py
         # Combine tweet content with additional context
         context_parts = []
         if request.additional_context:
             context_parts.append(f"Additional context: {request.additional_context}")
         
-        context_parts.append(f"Tweet posted by @{tweet_data.username} on {tweet_data.posted_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        context_parts.append(f"Source: Tweet by @{tweet_data.username} on {tweet_data.posted_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
         if tweet_data.user_display_name:
             context_parts.append(f"User display name: {tweet_data.user_display_name}")
         if tweet_data.user_verified:
@@ -85,60 +87,64 @@ async def research_twitter_statement(request: TwitterResearchRequest) -> Twitter
             context_parts.append(f"Engagement: {', '.join(engagement_info)}")
         
         context_parts.append(f"Original tweet URL: {request.tweet_url}")
+        context_parts.append(f"Extraction method: {tweet_data.extraction_method}")
         
         combined_context = "\n".join(context_parts)
         
-        # Create research request
+        # Create research request using same format as fc.py
         research_request = ResearchRequestAPI(
             statement=tweet_data.content,
-            source=f"@{tweet_data.user_display_name}",
+            source=f"@{tweet_data.username}",
             context=combined_context,
             datetime=tweet_data.posted_at,
             country=request.country,
             category=None  # Let the system auto-detect category
         )
         
-        # Step 4: Perform research
+        # Step 4: Perform research using same core service as fc.py
         logger.info("Starting tri-factor research on tweet content...")
         research_result = await fact_checking_core_service.process_research_request(research_request)
         
-        # Step 5: Create response
-        processing_time = time.time() - start_time
+        # Step 5: Enhance research result with Twitter-specific metadata
+        if hasattr(research_result, 'research_method'):
+            research_result.research_method = f"Twitter/X Analysis + {research_result.research_method}"
         
-        # Convert tweet data to response format
-        tweet_response = TwitterExtractionResponse(
-            username=tweet_data.username,
-            content=tweet_data.content,
-            posted_at=tweet_data.posted_at,
-            tweet_id=tweet_data.tweet_id,
-            tweet_url=tweet_data.tweet_url,
-            user_display_name=tweet_data.user_display_name,
-            user_verified=tweet_data.user_verified,
-            retweet_count=tweet_data.retweet_count,
-            like_count=tweet_data.like_count,
-            reply_count=tweet_data.reply_count,
-            extraction_method=tweet_data.extraction_method
-        )
+        # Add Twitter metadata to research summary
+        twitter_metadata = f"""
+
+=== TWITTER/X SOURCE METADATA ===
+Username: @{tweet_data.username}
+Display Name: {tweet_data.user_display_name or 'N/A'}
+Verified Account: {'Yes' if tweet_data.user_verified else 'No'}
+Tweet ID: {tweet_data.tweet_id}
+Posted: {tweet_data.posted_at.strftime('%Y-%m-%d %H:%M:%S UTC')}
+Extraction Method: {tweet_data.extraction_method}
+"""
         
-        # Convert research result to dict for response
-        if hasattr(research_result, 'model_dump'):
-            research_dict = research_result.model_dump()
-        elif hasattr(research_result, 'dict'):
-            research_dict = research_result.dict()
+        if hasattr(research_result, 'research_summary'):
+            research_result.research_summary = f"{research_result.research_summary}{twitter_metadata}"
+        
+        # Add Twitter-specific findings
+        twitter_findings = []
+        if tweet_data.user_verified:
+            twitter_findings.append("Source account is verified")
+        if tweet_data.like_count and tweet_data.like_count > 1000:
+            twitter_findings.append(f"High engagement: {tweet_data.like_count:,} likes")
+        twitter_findings.append(f"Content extracted via {tweet_data.extraction_method}")
+        
+        if hasattr(research_result, 'web_findings') and research_result.web_findings:
+            research_result.web_findings.extend(twitter_findings)
         else:
-            research_dict = vars(research_result)
+            research_result.web_findings = twitter_findings
         
-        response = TwitterResearchResponse(
-            tweet_data=tweet_response,
-            research_result=research_dict,
-            research_method=getattr(research_result, 'research_method', 'Tri-factor research')
-        )
+        processing_time = time.time() - start_time
         
         logger.info(f"Twitter fact-check completed successfully in {processing_time:.2f} seconds")
         logger.info(f"Research status: {getattr(research_result, 'status', 'Unknown')}")
         logger.info(f"Confidence score: {getattr(research_result, 'confidence_score', 'N/A')}")
         
-        return response
+        # Return the same EnhancedLLMResearchResponse format as fc.py
+        return research_result
         
     except HTTPException:
         # Re-raise HTTP exceptions as-is

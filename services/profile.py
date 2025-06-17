@@ -1,15 +1,13 @@
-import os
-import re
-import logging
-from typing import Optional,  List
+from typing import Optional, List
 from dotenv import load_dotenv
 from supabase import create_client, Client
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, validator
+import logging
+import os
+import re
 
-# Load environment variables
 load_dotenv()
 
-# Configure logging
 logger = logging.getLogger(__name__)
 
 class ProfileCreate(BaseModel):
@@ -17,12 +15,20 @@ class ProfileCreate(BaseModel):
     avatar_url: Optional[str] = None
     country: Optional[str] = None  # ISO 3166-1 alpha-2 code
     party: Optional[str] = None
+    type: Optional[str] = Field(default="person", description="Type: person, media, organization, etc.")
+    position: Optional[str] = Field(default=None, description="Position or role")
+    bg_url: Optional[str] = Field(default=None, description="Background image URL")
+    score: Optional[float] = Field(default=0.0, ge=0.0, le=100.0, description="Credibility score (0-100)")
 
 class ProfileUpdate(BaseModel):
     name: Optional[str] = None
     avatar_url: Optional[str] = None
     country: Optional[str] = None
     party: Optional[str] = None
+    type: Optional[str] = None
+    position: Optional[str] = None
+    bg_url: Optional[str] = None
+    score: Optional[float] = Field(default=None, ge=0.0, le=100.0)
 
 class ProfileResponse(BaseModel):
     id: str
@@ -31,6 +37,10 @@ class ProfileResponse(BaseModel):
     avatar_url: Optional[str] = None
     country: Optional[str] = None
     party: Optional[str] = None
+    type: Optional[str] = "person"
+    position: Optional[str] = None
+    bg_url: Optional[str] = None
+    score: Optional[float] = 0.0
     created_at: str
     updated_at: str
 
@@ -108,7 +118,9 @@ class ProfileService:
             
             profile_data = {
                 "name": name.strip(),
-                "name_normalized": normalized_name
+                "name_normalized": normalized_name,
+                "type": "person",
+                "score": 0.0
             }
             
             create_response = self.supabase.table("profiles").insert(profile_data).execute()
@@ -171,34 +183,38 @@ class ProfileService:
             if updates.name is not None:
                 update_data["name"] = updates.name.strip()
                 update_data["name_normalized"] = self.normalize_name(updates.name)
-            
+
             if updates.avatar_url is not None:
                 update_data["avatar_url"] = updates.avatar_url
                 
             if updates.country is not None:
-                # Validate country code format (2 letters)
-                if updates.country and len(updates.country) == 2:
-                    update_data["country"] = updates.country.upper()
-                elif updates.country == "":
-                    update_data["country"] = None
-                else:
-                    logger.warning(f"Invalid country code format: {updates.country}")
+                update_data["country"] = updates.country
                     
             if updates.party is not None:
-                update_data["party"] = updates.party.strip() if updates.party else None
+                update_data["party"] = updates.party
+                
+            if updates.type is not None:
+                update_data["type"] = updates.type
+                
+            if updates.position is not None:
+                update_data["position"] = updates.position
+                
+            if updates.bg_url is not None:
+                update_data["bg_url"] = updates.bg_url
+                
+            if updates.score is not None:
+                update_data["score"] = updates.score
             
             if not update_data:
-                logger.warning(f"No valid updates provided for profile: {profile_id}")
-                return None
+                logger.warning(f"No update data provided for profile: {profile_id}")
+                return self.get_profile_by_id(profile_id)
             
             response = self.supabase.table("profiles").update(update_data).eq("id", profile_id).execute()
             
             if response.data:
-                updated_profile = response.data[0]
-                logger.info(f"Successfully updated profile: {profile_id}")
-                return ProfileResponse(**updated_profile)
+                return ProfileResponse(**response.data[0])
             else:
-                logger.error(f"Failed to update profile - no data returned: {profile_id}")
+                logger.warning(f"Profile update returned no data: {profile_id}")
                 return None
                 
         except Exception as e:
@@ -224,7 +240,7 @@ class ProfileService:
                 logger.info(f"Successfully deleted profile: {profile_id}")
                 return True
             else:
-                logger.warning(f"Profile not found for deletion: {profile_id}")
+                logger.warning(f"Profile deletion returned no data: {profile_id}")
                 return False
                 
         except Exception as e:
@@ -236,6 +252,8 @@ class ProfileService:
         search_text: Optional[str] = None,
         country: Optional[str] = None,
         party: Optional[str] = None,
+        profile_type: Optional[str] = None,
+        include_statement_counts: bool = False,
         limit: int = 50,
         offset: int = 0
     ) -> List[ProfileResponse]:
@@ -246,6 +264,8 @@ class ProfileService:
             search_text: Text to search in names
             country: Filter by country code
             party: Filter by party
+            profile_type: Filter by profile type
+            include_statement_counts: Whether to include statement counts
             limit: Maximum results to return
             offset: Number of results to skip
             
@@ -253,19 +273,22 @@ class ProfileService:
             List of profiles
         """
         try:
-            logger.debug(f"Searching profiles: text='{search_text}', country='{country}', party='{party}'")
+            logger.debug(f"Searching profiles: text='{search_text}', country='{country}', party='{party}', type='{profile_type}'")
             
             query = self.supabase.table("profiles").select("*")
             
             if search_text:
-                # Search in both original name and normalized name
+                # Search in both name and name_normalized
                 query = query.or_(f"name.ilike.%{search_text}%,name_normalized.ilike.%{search_text}%")
             
             if country:
-                query = query.eq("country", country.upper())
+                query = query.eq("country", country)
                 
             if party:
-                query = query.ilike("party", f"%{party}%")
+                query = query.eq("party", party)
+                
+            if profile_type:
+                query = query.eq("type", profile_type)
             
             response = query.order("name").range(offset, offset + limit - 1).execute()
             
@@ -282,7 +305,7 @@ class ProfileService:
         """Get profile by speaker name using Supabase SDK"""
         try:
             if not speaker_name or not speaker_name.strip():
-                logger.warning("Empty speaker name provided to get_profile_by_name")
+                logger.warning("Empty speaker name provided")
                 return None
             
             # Normalize the name for consistent matching
@@ -298,11 +321,9 @@ class ProfileService:
             response = self.supabase.table("profiles").select("*").eq("name_normalized", normalized_name).limit(1).execute()
             
             if response.data:
-                profile = response.data[0]
-                logger.debug(f"Found profile by name: ID={profile['id']}, Name='{profile['name']}'")
-                return profile
+                return response.data[0]
             else:
-                logger.debug(f"No profile found for name: '{speaker_name}' (normalized: '{normalized_name}')")
+                logger.debug(f"No profile found for normalized name: '{normalized_name}'")
                 return None
                 
         except Exception as e:
@@ -313,7 +334,7 @@ class ProfileService:
         """Create new profile for speaker using Supabase SDK"""
         try:
             if not speaker_name or not speaker_name.strip():
-                logger.warning("Empty speaker name provided to create_profile")
+                logger.warning("Empty speaker name provided for creation")
                 return None
             
             # Normalize the name for consistent storage
@@ -328,18 +349,19 @@ class ProfileService:
             # Prepare profile data
             profile_data = {
                 "name": speaker_name.strip(),
-                "name_normalized": normalized_name
+                "name_normalized": normalized_name,
+                "type": "person",
+                "score": 0.0
             }
             
             # Insert new profile into Supabase
             response = self.supabase.table("profiles").insert(profile_data).execute()
             
             if response.data:
-                new_profile = response.data[0]
-                logger.info(f"Successfully created profile: ID={new_profile['id']}, Name='{new_profile['name']}'")
-                return new_profile
+                logger.info(f"Successfully created profile: {response.data[0]['id']}")
+                return response.data[0]
             else:
-                logger.error(f"Failed to create profile - no data returned for: '{speaker_name}'")
+                logger.error(f"Failed to create profile - no data returned: '{speaker_name}'")
                 return None
                 
         except Exception as e:
@@ -359,7 +381,7 @@ class ProfileService:
         """
         try:
             if not speaker_name or not speaker_name.strip():
-                logger.warning("Empty speaker name provided to process_speaker_profile")
+                logger.warning("Empty speaker name provided for processing")
                 return None
             
             logger.debug(f"Processing speaker profile for: '{speaker_name}'")
@@ -368,9 +390,9 @@ class ProfileService:
             profile_id = self.get_or_create_profile(speaker_name)
             
             if profile_id:
-                logger.debug(f"Successfully processed speaker profile for '{speaker_name}': {profile_id}")
+                logger.debug(f"Successfully processed speaker profile: '{speaker_name}' -> {profile_id}")
             else:
-                logger.error(f"Failed to process speaker profile for '{speaker_name}'")
+                logger.warning(f"Failed to process speaker profile: '{speaker_name}'")
             
             return profile_id
             

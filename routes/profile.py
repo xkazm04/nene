@@ -57,11 +57,6 @@ async def get_profile(profile_id: str) -> ProfileResponse:
     Args:
         profile_id: Profile UUID
         
-    Returns:
-        ProfileResponse: Profile data with total_statements count
-        
-    Raises:
-        HTTPException: If profile not found
     """
     try:
         logger.info(f"Retrieving profile: {profile_id}")
@@ -72,7 +67,7 @@ async def get_profile(profile_id: str) -> ProfileResponse:
             logger.warning(f"Profile not found: {profile_id}")
             raise HTTPException(status_code=404, detail="Profile not found")
         
-        logger.info(f"Successfully retrieved profile: {profile_id} with {profile.total_statements} statements")
+        logger.info(f"Successfully retrieved profile: {profile_id} with")
         return profile
         
     except HTTPException:
