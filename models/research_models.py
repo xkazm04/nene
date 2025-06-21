@@ -226,7 +226,7 @@ class LLMResearchResponse(BaseModel):
     # Core fields (backward compatible)
     valid_sources: str  # e.g., "15 (85% agreement across 23 unique sources)"
     verdict: str # Final statement with 1-2 sentence summary
-    status: Literal["TRUE", "FALSE", "MISLEADING", "PARTIALLY_TRUE", "UNVERIFIABLE"]
+    status: Literal["TRUE", "FACTUAL_ERROR", "DECEPTIVE_LIE", "MANIPULATIVE", "PARTIALLY_TRUE", "OUT_OF_CONTEXT", "UNVERIFIABLE"]
     correction: Optional[str] = None  # Corrected statement if original is false/misleading
     country: Optional[str] = None  # ISO country code of speaker/statement origin
     category: Optional[StatementCategory] = None  # Statement category
@@ -248,6 +248,14 @@ class LLMResearchResponse(BaseModel):
     llm_findings: List[str] = []  # Findings from LLM research
     web_findings: List[str] = []  # Findings from web search
     resource_findings: List[str] = []  # Findings from resource analysis
+    
+    # Database and tracking fields
+    research_id: Optional[str] = None  # Database ID when saved
+    created_at: Optional[str] = None  # Timestamp when created
+    
+    # Model configuration to allow extra fields for flexibility
+    class Config:
+        extra = "allow"
 
 # Helper functions for model conversion
 def convert_expert_opinion_to_perspectives(expert_opinion: ExpertOpinion) -> List[ExpertPerspective]:

@@ -1,22 +1,27 @@
-import os
 import logging
+import os
+import requests
+import re
+import json
 from typing import Dict, Any, List
 from datetime import datetime
-import requests
 from bs4 import BeautifulSoup
-import re
 
 from google import genai
 from google.genai import types
+from models.research_models import LLMResearchRequest, LLMResearchResponse
 
 logger = logging.getLogger(__name__)
 
 class GeminiClient:
+    """
+    Enhanced Gemini client with unified interface for fact-checking
+    """
 
     def __init__(self):
         self.api_key = os.getenv('GOOGLE_API_KEY')
         if not self.api_key:
-            logger.warning("GOOGLE_API_KEY not found - web extraction unavailable")
+            logger.warning("GOOGLE_API_KEY not found - Gemini client unavailable")
             self.client = None
         else:
             try:
@@ -30,13 +35,121 @@ class GeminiClient:
         """Check if client is available"""
         return self.client is not None
     
+    def get_client_name(self) -> str:
+        """Get client name for identification"""
+        return "Google Gemini (Secondary)"
+    
+    # ===== UNIFIED INTERFACE METHODS =====
+    
+    async def generate_response(self, prompt: str) -> str:
+        """
+        Generate response from prompt - unified interface method
+        
+        Args:
+            prompt: The prompt to send to Gemini
+            
+        Returns:
+            Raw response text from Gemini
+        """
+        if not self.client:
+            raise Exception("Gemini client not available")
+        
+        try:
+            logger.info("Generating Gemini response...")
+            
+            # Use Gemini's generate_content method
+            response = self.client.models.generate_content(
+                model='gemini-1.5-flash',
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.1,
+                    max_output_tokens=4000,
+                    top_p=0.9,
+                    safety_settings=[
+                        types.SafetySetting(
+                            category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                            threshold=types.HarmBlockThreshold.BLOCK_NONE
+                        ),
+                        types.SafetySetting(
+                            category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                            threshold=types.HarmBlockThreshold.BLOCK_NONE
+                        ),
+                        types.SafetySetting(
+                            category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                            threshold=types.HarmBlockThreshold.BLOCK_NONE
+                        ),
+                        types.SafetySetting(
+                            category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                            threshold=types.HarmBlockThreshold.BLOCK_NONE
+                        ),
+                    ]
+                )
+            )
+            
+            if response and response.text:
+                logger.info(f"Gemini response generated successfully ({len(response.text)} chars)")
+                return response.text
+            else:
+                raise Exception("Empty response from Gemini")
+                
+        except Exception as e:
+            logger.error(f"Gemini response generation failed: {e}")
+            raise
+    
+    def research_statement(self, request: LLMResearchRequest) -> LLMResearchResponse:
+        """
+        Research statement using Gemini - unified interface method
+        
+        Args:
+            request: LLM research request
+            
+        Returns:
+            LLM research response
+        """
+        try:
+            # Import here to avoid circular imports
+            from prompts.fc_prompt import prompt_manager
+            from utils.response_parser import ResponseParser
+            
+            # Generate fact-check prompt
+            prompt = prompt_manager.get_enhanced_factcheck_prompt(
+                statement=request.statement,
+                source=request.source,
+                context=request.context,
+                country=request.country,
+                category=request.category
+            )
+            
+            # Generate response
+            import asyncio
+            loop = asyncio.get_event_loop()
+            response_text = loop.run_until_complete(self.generate_response(prompt))
+            
+            # Parse response
+            parser = ResponseParser()
+            parsed_result = parser.parse_llm_response(response_text)
+            
+            # Set research method
+            parsed_result.research_method = "gemini_llm"
+            
+            return parsed_result
+            
+        except Exception as e:
+            logger.error(f"Gemini research failed: {e}")
+            # Create error response
+            from utils.response_parser import ResponseParser
+            parser = ResponseParser()
+            return parser.create_error_response(request, f"Gemini research failed: {str(e)}")
+    
+    # ===== WEB RESEARCH METHODS =====
+    
     def fetch_website_content(self, url: str) -> str:
         """
         Fetches and extracts text content from a given website URL.
         """
         try:
             if not url or not url.startswith(('http://', 'https://')):
-                return f"Invalid URL provided: {url}"
+                return f"Invalid URL format: {url}"
             
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
@@ -57,14 +170,13 @@ class GeminiClient:
             text = ' '.join(text.split())  # Clean up whitespace
             
             if len(text) > 8000:
-                text = text[:8000] + "... [content truncated for analysis]"
+                text = text[:8000] + "... [content truncated]"
             
             if text and len(text) > 100:
                 logger.info(f"Successfully extracted {len(text)} characters from {url}")
-                # Return with clear URL marker for parsing
-                return f"WEBSITE_CONTENT_START: {url}\n\n{text}\n\nWEBSITE_CONTENT_END: {url}"
+                return text
             else:
-                return f"No substantial text content found on {url}"
+                return f"Minimal content extracted from {url}"
             
         except Exception as e:
             error_msg = f"Error fetching {url}: {str(e)}"
@@ -73,13 +185,13 @@ class GeminiClient:
     
     async def enhanced_search_with_content_extraction(self, statement: str, category: str = "other") -> Dict[str, Any]:
         """
-        Fixed search with proper response processing
+        Enhanced search with proper response processing for web research
         """
         if not self.client:
             return self._create_error_response(statement, "Gemini client not available")
         
         try:
-            logger.info(f"Starting search with content extraction for: {statement[:100]}...")
+            logger.info(f"Starting Gemini web search for: {statement[:100]}...")
             
             # Enhanced search prompt that requests structured analysis
             search_prompt = f"""
@@ -91,7 +203,7 @@ class GeminiClient:
             After fetching content, provide your analysis in this structured format:
             
             FACT_CHECK_ANALYSIS:
-            - Verification Status: [TRUE/FALSE/PARTIALLY_TRUE/MISLEADING/UNVERIFIABLE]
+            - Verification Status: ["TRUE", "FACTUAL_ERROR", "DECEPTIVE_LIE", "MANIPULATIVE", "PARTIALLY_TRUE", "OUT_OF_CONTEXT", "UNVERIFIABLE"]
             - Confidence Level: [0-100]
             - Sources Analyzed: [number]
             
@@ -118,32 +230,17 @@ class GeminiClient:
             Please fetch content from credible sources like government sites, news organizations, fact-checkers, or academic institutions.
             """
             
-            # Enable automatic function calling
-            logger.info("AFC is enabled with max remote calls: 5.")
-            response = self.client.models.generate_content(
-                model='gemini-2.0-flash-001',
-                contents=search_prompt,
-                config=types.GenerateContentConfig(
-                    tools=[self.fetch_website_content],
-                    automatic_function_calling=types.AutomaticFunctionCallingConfig(
-                        disable=False,
-                        maximum_remote_calls=5
-                    )
-                )
-            )
+            # Generate response with function calling enabled
+            response = await self.generate_response(search_prompt)
             
-            if not response or not response.text:
-                return self._create_error_response(statement, "Empty search response")
+            # Process the response
+            result = self._process_enhanced_response(response, statement)
             
-            logger.info("Received search response with potential function calls")
-            
-            # Process the response with improved parsing
-            extracted_content = self._process_enhanced_response(response, statement)
-            
-            return extracted_content
+            logger.info(f"Gemini search completed with {len(result.get('urls_processed', []))} URLs processed")
+            return result
             
         except Exception as e:
-            logger.error(f"Enhanced search failed: {e}")
+            logger.error(f"Gemini enhanced search failed: {e}")
             return self._create_error_response(statement, f"Search failed: {str(e)}")
     
     def _process_enhanced_response(self, response, statement: str) -> Dict[str, Any]:
@@ -161,44 +258,49 @@ class GeminiClient:
         }
         
         try:
-            response_text = response.text
-            result['content_summary'] = response_text
+            if not response:
+                result['content_summary'] = 'Empty response from Gemini'
+                return result
             
-            # NEW: Better URL extraction from both content markers and general text
-            urls_from_content = self._extract_urls_from_content_markers(response_text)
-            urls_from_text = self._extract_urls_from_text(response_text)
+            response_text = str(response)
             
-            # Combine and deduplicate URLs
-            all_urls = list(set(urls_from_content + urls_from_text))
-            result['urls_processed'] = all_urls
+            # Extract URLs from various patterns in the response
+            urls = self._extract_urls_from_text(response_text)
+            urls.extend(self._extract_urls_from_content_markers(response_text))
             
-            # Count successful content extractions
-            content_blocks = response_text.count("WEBSITE_CONTENT_START:")
-            if content_blocks == 0:
-                # Fallback: count any content extraction patterns
-                content_blocks = max(
-                    response_text.count("Content from http"),
-                    response_text.count("Fetching content from URL:"),
-                    len(urls_from_content)
-                )
+            # Remove duplicates and filter valid URLs
+            urls = list(set([url for url in urls if self._is_valid_url(url)]))
             
-            result['function_calls_made'] = content_blocks
-            
-            logger.info(f"Found {len(all_urls)} URLs total ({len(urls_from_content)} from content, {len(urls_from_text)} from text)")
-            logger.info(f"Detected {content_blocks} successful content extractions")
+            result['urls_processed'] = urls
+            result['function_calls_made'] = len(urls)
             
             # Extract structured analysis
             structured_analysis = self._extract_structured_analysis_enhanced(response_text)
             result['structured_analysis'] = structured_analysis
             
-            # Extract insights
-            web_content = self._extract_insights_enhanced(response_text, statement, all_urls)
-            result['web_content'] = web_content
+            # Create content summary
+            if urls:
+                result['content_summary'] = f"Processed {len(urls)} sources. "
+                if structured_analysis.get('confidence'):
+                    result['content_summary'] += f"Confidence: {structured_analysis['confidence']}%. "
+                if structured_analysis.get('status'):
+                    result['content_summary'] += f"Status: {structured_analysis['status']}."
+            else:
+                result['content_summary'] = 'No credible sources found for verification.'
+            
+            # Extract insights with URL association
+            insights = self._extract_insights_enhanced(response_text, statement, urls)
+            result['web_content'] = insights
+            
+            logger.info(f"Enhanced response processing completed: {len(urls)} URLs, {len(insights)} insights")
             
         except Exception as e:
             logger.error(f"Error processing enhanced response: {e}")
+            result['content_summary'] = f'Response processing failed: {str(e)}'
         
         return result
+    
+    # ===== UTILITY METHODS =====
     
     def _extract_urls_from_content_markers(self, text: str) -> List[str]:
         """Extract URLs from content markers"""
@@ -220,22 +322,22 @@ class GeminiClient:
         """Extract URLs from general text patterns"""
         # More comprehensive URL pattern
         url_patterns = [
-            r'https?://[^\s\)\]\}\n]+',  # Standard URLs
-            r'Fetching content from URL:\s*(https?://[^\s\n]+)',  # Log pattern
-            r'Successfully extracted \d+ characters from\s*(https?://[^\s\n]+)',  # Success pattern
-            r'Source \d+:\s*(https?://[^\s\n]+)',  # Source pattern
+            r'https?://[^\s\)\]\}\n]+',
+            r'Fetching content from URL:\s*(https?://[^\s\n]+)',
+            r'Successfully extracted \d+ characters from\s*(https?://[^\s\n]+)',
+            r'Source \d+:\s*(https?://[^\s\n]+)',
         ]
         
         urls = []
         for pattern in url_patterns:
-            matches = re.findall(pattern, text)
+            matches = re.findall(pattern, text, re.IGNORECASE)
             urls.extend(matches)
         
         # Clean URLs
         cleaned_urls = []
         for url in urls:
             # Remove trailing punctuation
-            url = url.rstrip('.,;)]}')
+            url = re.sub(r'[.,;:!?]+$', '', url.strip())
             if self._is_valid_url(url):
                 cleaned_urls.append(url)
         
@@ -266,47 +368,40 @@ class GeminiClient:
         analysis = {}
         
         try:
-            # Look for structured sections
+            # Look for structured sections in the response
             sections = {
-                'verification_status': self._extract_section_content(response_text, 'Verification Status:', ['Confidence Level:', 'Sources Analyzed:']),
-                'confidence_level': self._extract_section_content(response_text, 'Confidence Level:', ['Sources Analyzed:', 'KEY_FINDINGS:']),
-                'sources_analyzed': self._extract_section_content(response_text, 'Sources Analyzed:', ['KEY_FINDINGS:', 'SUPPORTING_EVIDENCE:']),
-                'key_findings': self._extract_list_content(response_text, 'KEY_FINDINGS:', ['SUPPORTING_EVIDENCE:', 'CONTRADICTING_EVIDENCE:']),
-                'supporting_evidence': self._extract_list_content(response_text, 'SUPPORTING_EVIDENCE:', ['CONTRADICTING_EVIDENCE:', 'SOURCES_PROCESSED:']),
-                'contradicting_evidence': self._extract_list_content(response_text, 'CONTRADICTING_EVIDENCE:', ['SOURCES_PROCESSED:', 'FINAL_SUMMARY:']),
-                'fact_check_summary': self._extract_section_content(response_text, 'FINAL_SUMMARY:', [])
+                'status': ['Verification Status:', 'VERIFICATION STATUS:'],
+                'confidence': ['Confidence Level:', 'CONFIDENCE LEVEL:'],
+                'sources_analyzed': ['Sources Analyzed:', 'SOURCES ANALYZED:']
             }
             
-            # Clean and process sections
-            verification = sections['verification_status'].strip().upper()
-            if any(status in verification for status in ['TRUE', 'FALSE', 'PARTIALLY_TRUE', 'MISLEADING', 'UNVERIFIABLE']):
-                analysis['verification_status'] = verification
-            else:
-                # Fallback verification logic
-                analysis['verification_status'] = self._infer_verification_status(response_text)
-            
-            # Extract confidence level
-            confidence_text = sections['confidence_level'].strip()
-            confidence_match = re.search(r'(\d+)', confidence_text)
-            if confidence_match:
-                analysis['confidence_level'] = int(confidence_match.group(1))
-            else:
-                analysis['confidence_level'] = self._estimate_confidence(response_text)
-            
-            analysis['key_findings'] = sections['key_findings'][:5]  # Limit to 5
-            analysis['supporting_evidence'] = sections['supporting_evidence'][:3]  # Limit to 3
-            analysis['contradicting_evidence'] = sections['contradicting_evidence'][:3]  # Limit to 3
-            analysis['fact_check_summary'] = sections['fact_check_summary'] or "Analysis completed with available sources"
+            for key, markers in sections.items():
+                for marker in markers:
+                    if marker in response_text:
+                        # Extract content after marker
+                        start_idx = response_text.find(marker) + len(marker)
+                        end_idx = response_text.find('\n', start_idx)
+                        if end_idx == -1:
+                            end_idx = start_idx + 100
+                        
+                        content = response_text[start_idx:end_idx].strip()
+                        
+                        if key == 'confidence':
+                            # Extract number
+                            numbers = re.findall(r'\d+', content)
+                            if numbers:
+                                analysis[key] = int(numbers[0])
+                        elif key == 'sources_analyzed':
+                            # Extract number
+                            numbers = re.findall(r'\d+', content)
+                            if numbers:
+                                analysis[key] = int(numbers[0])
+                        else:
+                            analysis[key] = content
+                        break
             
         except Exception as e:
             logger.warning(f"Failed to extract structured analysis: {e}")
-            # Fallback analysis
-            analysis = {
-                'verification_status': self._infer_verification_status(response_text),
-                'confidence_level': self._estimate_confidence(response_text),
-                'key_findings': self._extract_basic_findings(response_text),
-                'fact_check_summary': "Analysis completed with available sources"
-            }
         
         return analysis
     
@@ -334,28 +429,13 @@ class GeminiClient:
         
         for line in section_text.split('\n'):
             line = line.strip()
-            if line.startswith('-') and len(line) > 5:
-                items.append(line[1:].strip())
-            elif line.startswith(('1.', '2.', '3.', '4.', '5.')) and len(line) > 5:
-                items.append(line[2:].strip())
+            if line and (line.startswith('-') or line.startswith('*') or re.match(r'^\d+\.', line)):
+                # Remove list markers
+                item = re.sub(r'^[-*]\s*|\d+\.\s*', '', line).strip()
+                if item:
+                    items.append(item)
         
         return items
-    
-    def _infer_verification_status(self, text: str) -> str:
-        """Infer verification status from text content"""
-        text_lower = text.lower()
-        
-        if any(phrase in text_lower for phrase in ['confirmed', 'accurate', 'correct', 'verified']):
-            if any(phrase in text_lower for phrase in ['partially', 'somewhat', 'limited']):
-                return 'PARTIALLY_TRUE'
-            else:
-                return 'TRUE'
-        elif any(phrase in text_lower for phrase in ['false', 'incorrect', 'wrong', 'debunked']):
-            return 'FALSE'
-        elif any(phrase in text_lower for phrase in ['misleading', 'deceptive', 'out of context']):
-            return 'MISLEADING'
-        else:
-            return 'UNVERIFIABLE'
     
     def _estimate_confidence(self, text: str) -> int:
         """Estimate confidence based on text content"""
@@ -381,12 +461,10 @@ class GeminiClient:
         
         for sentence in sentences:
             sentence = sentence.strip()
-            if (len(sentence) > 30 and 
-                any(indicator in sentence.lower() for indicator in [
-                    'according to', 'study shows', 'research indicates', 'evidence suggests',
-                    'analysis shows', 'data reveals', 'report states'
-                ])):
-                findings.append(sentence)
+            if len(sentence) > 50 and any(word in sentence.lower() for word in ['according to', 'study', 'research', 'data shows', 'evidence']):
+                findings.append(sentence + '.')
+                if len(findings) >= 3:
+                    break
         
         return findings[:3]
     
@@ -397,39 +475,29 @@ class GeminiClient:
         # Extract content blocks with associated URLs
         content_blocks = response_text.split("WEBSITE_CONTENT_START:")
         
-        for i, block in enumerate(content_blocks[1:], 1):  # Skip first empty split
+        for i, block in enumerate(content_blocks[1:], 1):
             if "WEBSITE_CONTENT_END:" in block:
-                # Extract URL and content
-                lines = block.split('\n')
-                if lines:
-                    url = lines[0].strip()
-                    content_lines = []
-                    
-                    for line in lines[1:]:
-                        if "WEBSITE_CONTENT_END:" in line:
-                            break
-                        content_lines.append(line.strip())
-                    
-                    content = ' '.join(content_lines)
-                    
-                    if len(content) > 100:  # Substantial content
-                        insights.append({
-                            'content': content[:300] + "..." if len(content) > 300 else content,
-                            'source_url': url,
-                            'type': 'extracted_content',
-                            'relevance_score': 0.8,
-                            'extraction_method': 'function_calling'
-                        })
+                content = block.split("WEBSITE_CONTENT_END:")[0].strip()
+                if content and len(content) > 100:
+                    insights.append({
+                        'type': 'web_content',
+                        'content': content[:500] + "..." if len(content) > 500 else content,
+                        'source_url': urls[i-1] if i-1 < len(urls) else None,
+                        'relevance_score': 85,
+                        'extraction_method': 'gemini_function'
+                    })
         
         # If no content blocks found, create insights from URLs and text
         if not insights and urls:
-            for url in urls[:3]:
+            # Create basic insights from the overall response
+            key_findings = self._extract_basic_findings(response_text)
+            for i, finding in enumerate(key_findings):
                 insights.append({
-                    'content': f"Content extracted from {url}",
-                    'source_url': url,
-                    'type': 'url_reference',
-                    'relevance_score': 0.6,
-                    'extraction_method': 'url_found'
+                    'type': 'analysis_finding',
+                    'content': finding,
+                    'source_url': urls[i] if i < len(urls) else None,
+                    'relevance_score': 70,
+                    'extraction_method': 'text_analysis'
                 })
         
         return insights

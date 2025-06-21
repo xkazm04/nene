@@ -50,7 +50,7 @@ async def get_research_results(
     limit: int = Query(default=50, ge=1, le=100, description="Number of results to return"),
     offset: int = Query(default=0, ge=0, description="Number of results to skip"),
     # Filtering
-    status: Optional[str] = Query(default=None, description="Filter by status (TRUE, FALSE, MISLEADING, etc.)"),
+    status: Optional[str] = Query(default=None, description="Filter by status"),
     category: Optional[str] = Query(default=None, description="Filter by category"),
     country: Optional[str] = Query(default=None, description="Filter by country code"),
     source: Optional[str] = Query(default=None, description="Filter by source"),
@@ -79,7 +79,7 @@ async def get_research_results(
         
         # Apply basic filters
         if status:
-            valid_statuses = ['TRUE', 'FALSE', 'MISLEADING', 'PARTIALLY_TRUE', 'UNVERIFIABLE']
+            valid_statuses = ["TRUE", "FACTUAL_ERROR", "DECEPTIVE_LIE", "MANIPULATIVE", "PARTIALLY_TRUE", "OUT_OF_CONTEXT", "UNVERIFIABLE"]
             if status.upper() in valid_statuses:
                 query = query.eq('status', status.upper())
             else:

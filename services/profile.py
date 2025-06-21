@@ -20,6 +20,26 @@ class ProfileCreate(BaseModel):
     bg_url: Optional[str] = Field(default=None, description="Background image URL")
     score: Optional[float] = Field(default=0.0, ge=0.0, le=100.0, description="Credibility score (0-100)")
 
+    def model_dump(self, **kwargs):
+        """Ensure normalized name is included"""
+        data = super().model_dump(**kwargs)
+        if 'name_normalized' not in data and 'name' in data:
+            data['name_normalized'] = self._normalize_name(data['name'])
+        return data
+    
+    def _normalize_name(self, name: str) -> str:
+        """Normalize name for database"""
+        if not name:
+            return ""
+        
+        # Remove extra whitespace and convert to lowercase
+        normalized = re.sub(r'\s+', ' ', name.strip()).lower()
+        
+        # Remove special characters except spaces, hyphens, and apostrophes
+        normalized = re.sub(r"[^\w\s\-']", '', normalized)
+        
+        return normalized
+
 class ProfileUpdate(BaseModel):
     name: Optional[str] = None
     avatar_url: Optional[str] = None
@@ -126,15 +146,15 @@ class ProfileService:
             create_response = self.supabase.table("profiles").insert(profile_data).execute()
             
             if create_response.data:
-                new_profile_id = create_response.data[0]["id"]
-                logger.info(f"Successfully created new profile: ID={new_profile_id}, Name='{name}'")
-                return new_profile_id
+                new_profile = create_response.data[0]
+                logger.info(f"Successfully created profile: ID={new_profile['id']}, Name='{new_profile['name']}'")
+                return new_profile["id"]
             else:
-                logger.error(f"Failed to create profile - no data returned: '{name}'")
+                logger.error(f"Failed to create profile for '{name}': {create_response}")
                 return None
                 
         except Exception as e:
-            logger.error(f"Error in get_or_create_profile for name '{name}': {str(e)}")
+            logger.error(f"Error in get_or_create_profile for '{name}': {str(e)}")
             return None
 
     def get_profile_by_id(self, profile_id: str) -> Optional[ProfileResponse]:
@@ -148,19 +168,68 @@ class ProfileService:
             ProfileResponse: Profile data if found, None otherwise
         """
         try:
-            logger.debug(f"Retrieving profile: {profile_id}")
+            response = self.supabase.table("profiles").select("*").eq("id", profile_id).single().execute()
             
-            response = self.supabase.table("profiles").select("*").eq("id", profile_id).limit(1).execute()
-            
-            if not response.data:
+            if response.data:
+                return ProfileResponse(**response.data)
+            else:
                 logger.warning(f"Profile not found: {profile_id}")
                 return None
-            
-            profile_data = response.data[0]
-            return ProfileResponse(**profile_data)
-            
+                
         except Exception as e:
-            logger.error(f"Failed to retrieve profile {profile_id}: {str(e)}")
+            logger.error(f"Error getting profile by ID {profile_id}: {str(e)}")
+            return None
+
+    def get_profile_by_name(self, speaker_name: str) -> Optional[dict]:
+        """Get profile by speaker name using Supabase SDK"""
+        try:
+            normalized_name = self.normalize_name(speaker_name)
+            
+            if not normalized_name:
+                return None
+            
+            response = self.supabase.table("profiles").select("*").eq("name_normalized", normalized_name).limit(1).execute()
+            
+            if response.data:
+                profile = response.data[0]
+                logger.debug(f"Found profile by name: {profile['name']} (ID: {profile['id']})")
+                return profile
+            else:
+                logger.debug(f"No profile found for name: '{speaker_name}'")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error getting profile by name '{speaker_name}': {str(e)}")
+            return None
+
+    def create_profile(self, speaker_name: str) -> Optional[dict]:
+        """Create new profile for speaker using Supabase SDK"""
+        try:
+            normalized_name = self.normalize_name(speaker_name)
+            
+            if not normalized_name:
+                logger.warning(f"Cannot create profile with empty normalized name: '{speaker_name}'")
+                return None
+            
+            profile_data = {
+                "name": speaker_name.strip(),
+                "name_normalized": normalized_name,
+                "type": "person",
+                "score": 0.0
+            }
+            
+            response = self.supabase.table("profiles").insert(profile_data).execute()
+            
+            if response.data:
+                new_profile = response.data[0]
+                logger.info(f"Created new profile: {new_profile['name']} (ID: {new_profile['id']})")
+                return new_profile
+            else:
+                logger.error(f"Failed to create profile for '{speaker_name}': {response}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error creating profile for '{speaker_name}': {str(e)}")
             return None
 
     def update_profile(self, profile_id: str, updates: ProfileUpdate) -> Optional[ProfileResponse]:
@@ -175,50 +244,22 @@ class ProfileService:
             ProfileResponse: Updated profile data if successful, None otherwise
         """
         try:
-            logger.info(f"Updating profile: {profile_id}")
+            update_data = updates.model_dump(exclude_none=True)
             
-            # Prepare update data
-            update_data = {}
-            
-            if updates.name is not None:
-                update_data["name"] = updates.name.strip()
-                update_data["name_normalized"] = self.normalize_name(updates.name)
-
-            if updates.avatar_url is not None:
-                update_data["avatar_url"] = updates.avatar_url
-                
-            if updates.country is not None:
-                update_data["country"] = updates.country
-                    
-            if updates.party is not None:
-                update_data["party"] = updates.party
-                
-            if updates.type is not None:
-                update_data["type"] = updates.type
-                
-            if updates.position is not None:
-                update_data["position"] = updates.position
-                
-            if updates.bg_url is not None:
-                update_data["bg_url"] = updates.bg_url
-                
-            if updates.score is not None:
-                update_data["score"] = updates.score
-            
-            if not update_data:
-                logger.warning(f"No update data provided for profile: {profile_id}")
-                return self.get_profile_by_id(profile_id)
+            # Add normalized name if name is being updated
+            if 'name' in update_data:
+                update_data['name_normalized'] = self.normalize_name(update_data['name'])
             
             response = self.supabase.table("profiles").update(update_data).eq("id", profile_id).execute()
             
             if response.data:
                 return ProfileResponse(**response.data[0])
             else:
-                logger.warning(f"Profile update returned no data: {profile_id}")
+                logger.error(f"Failed to update profile {profile_id}: {response}")
                 return None
                 
         except Exception as e:
-            logger.error(f"Failed to update profile {profile_id}: {str(e)}")
+            logger.error(f"Error updating profile {profile_id}: {str(e)}")
             return None
 
     def delete_profile(self, profile_id: str) -> bool:
@@ -232,19 +273,17 @@ class ProfileService:
             bool: True if successful, False otherwise
         """
         try:
-            logger.info(f"Deleting profile: {profile_id}")
-            
             response = self.supabase.table("profiles").delete().eq("id", profile_id).execute()
             
             if response.data:
                 logger.info(f"Successfully deleted profile: {profile_id}")
                 return True
             else:
-                logger.warning(f"Profile deletion returned no data: {profile_id}")
+                logger.error(f"Failed to delete profile {profile_id}: {response}")
                 return False
                 
         except Exception as e:
-            logger.error(f"Failed to delete profile {profile_id}: {str(e)}")
+            logger.error(f"Error deleting profile {profile_id}: {str(e)}")
             return False
 
     def search_profiles(
@@ -273,100 +312,31 @@ class ProfileService:
             List of profiles
         """
         try:
-            logger.debug(f"Searching profiles: text='{search_text}', country='{country}', party='{party}', type='{profile_type}'")
-            
             query = self.supabase.table("profiles").select("*")
             
+            # Apply filters
             if search_text:
-                # Search in both name and name_normalized
-                query = query.or_(f"name.ilike.%{search_text}%,name_normalized.ilike.%{search_text}%")
-            
+                query = query.ilike("name", f"%{search_text}%")
             if country:
                 query = query.eq("country", country)
-                
             if party:
                 query = query.eq("party", party)
-                
             if profile_type:
                 query = query.eq("type", profile_type)
             
-            response = query.order("name").range(offset, offset + limit - 1).execute()
+            # Apply pagination
+            query = query.range(offset, offset + limit - 1)
             
-            profiles = [ProfileResponse(**profile) for profile in response.data] if response.data else []
+            response = query.execute()
             
-            logger.debug(f"Found {len(profiles)} profiles")
-            return profiles
-            
+            if response.data:
+                return [ProfileResponse(**profile) for profile in response.data]
+            else:
+                return []
+                
         except Exception as e:
-            logger.error(f"Failed to search profiles: {str(e)}")
+            logger.error(f"Error searching profiles: {str(e)}")
             return []
-
-    def get_profile_by_name(self, speaker_name: str) -> Optional[dict]:
-        """Get profile by speaker name using Supabase SDK"""
-        try:
-            if not speaker_name or not speaker_name.strip():
-                logger.warning("Empty speaker name provided")
-                return None
-            
-            # Normalize the name for consistent matching
-            normalized_name = self.normalize_name(speaker_name)
-            
-            if not normalized_name:
-                logger.warning(f"Name normalization resulted in empty string: '{speaker_name}'")
-                return None
-            
-            logger.debug(f"Looking up profile by normalized name: '{normalized_name}'")
-            
-            # Query profiles table using normalized name
-            response = self.supabase.table("profiles").select("*").eq("name_normalized", normalized_name).limit(1).execute()
-            
-            if response.data:
-                return response.data[0]
-            else:
-                logger.debug(f"No profile found for normalized name: '{normalized_name}'")
-                return None
-                
-        except Exception as e:
-            logger.error(f"Failed to get profile by name '{speaker_name}': {e}")
-            return None
-
-    def create_profile(self, speaker_name: str) -> Optional[dict]:
-        """Create new profile for speaker using Supabase SDK"""
-        try:
-            if not speaker_name or not speaker_name.strip():
-                logger.warning("Empty speaker name provided for creation")
-                return None
-            
-            # Normalize the name for consistent storage
-            normalized_name = self.normalize_name(speaker_name)
-            
-            if not normalized_name:
-                logger.warning(f"Name normalization resulted in empty string: '{speaker_name}'")
-                return None
-            
-            logger.info(f"Creating new profile for speaker: '{speaker_name}' (normalized: '{normalized_name}')")
-            
-            # Prepare profile data
-            profile_data = {
-                "name": speaker_name.strip(),
-                "name_normalized": normalized_name,
-                "type": "person",
-                "score": 0.0
-            }
-            
-            # Insert new profile into Supabase
-            response = self.supabase.table("profiles").insert(profile_data).execute()
-            
-            if response.data:
-                logger.info(f"Successfully created profile: {response.data[0]['id']}")
-                return response.data[0]
-            else:
-                logger.error(f"Failed to create profile - no data returned: '{speaker_name}'")
-                return None
-                
-        except Exception as e:
-            logger.error(f"Failed to create profile for '{speaker_name}': {e}")
-            return None
 
     def process_speaker_profile(self, speaker_name: str) -> Optional[str]:
         """
@@ -380,24 +350,9 @@ class ProfileService:
             Profile ID if successful, None otherwise
         """
         try:
-            if not speaker_name or not speaker_name.strip():
-                logger.warning("Empty speaker name provided for processing")
-                return None
-            
-            logger.debug(f"Processing speaker profile for: '{speaker_name}'")
-            
-            # Use the existing get_or_create_profile method
-            profile_id = self.get_or_create_profile(speaker_name)
-            
-            if profile_id:
-                logger.debug(f"Successfully processed speaker profile: '{speaker_name}' -> {profile_id}")
-            else:
-                logger.warning(f"Failed to process speaker profile: '{speaker_name}'")
-            
-            return profile_id
-            
+            return self.get_or_create_profile(speaker_name)
         except Exception as e:
-            logger.error(f"Failed to process speaker profile for '{speaker_name}': {e}")
+            logger.error(f"Error processing speaker profile '{speaker_name}': {str(e)}")
             return None
 
 # Create service instance

@@ -1,5 +1,6 @@
 import logging
 import json
+import traceback
 from typing import Dict, Any, List, Optional
 from models.research_models import (
     LLMResearchResponse, 
@@ -15,6 +16,182 @@ logger = logging.getLogger(__name__)
 
 class ResponseParser:
     """Enhanced parser for LLM responses with flexible resource categorization"""
+    
+    def parse_llm_response(self, response: str, request: Optional[LLMResearchRequest] = None) -> LLMResearchResponse:
+        """
+        Parse raw LLM response text and return LLMResearchResponse object.
+        
+        Args:
+            response: Raw response text from LLM
+            request: Optional original research request
+            
+        Returns:
+            LLMResearchResponse object
+        """
+        try:
+            logger.info(f"Parsing LLM response ({len(response)} chars)")
+            
+            # Try to extract JSON from the response
+            parsed_json = self._extract_json_from_response(response)
+            
+            if not parsed_json:
+                logger.warning("No valid JSON found in LLM response, creating fallback response")
+                return self._create_fallback_response(response, request)
+            
+            # Create response object using existing method
+            if request:
+                return self.create_response_object(parsed_json, request)
+            else:
+                # Create dummy request for compatibility
+                dummy_request = LLMResearchRequest(
+                    statement="Unknown statement",
+                    source="Unknown source",
+                    context="Unknown context"
+                )
+                return self.create_response_object(parsed_json, dummy_request)
+                
+        except Exception as e:
+            logger.error(f"Failed to parse LLM response: {e}")
+            logger.error(f"Response preview: {response[:200]}...")
+            return self._create_error_response_from_text(response, str(e), request)
+    
+    def _extract_json_from_response(self, response: str) -> Optional[Dict[str, Any]]:
+        """Extract JSON object from LLM response text"""
+        try:
+            # First, try to parse the entire response as JSON
+            try:
+                return json.loads(response.strip())
+            except json.JSONDecodeError:
+                pass
+            
+            # Try to find JSON within the response text
+            json_patterns = [
+                # Look for JSON between triple backticks
+                r'```json\s*(\{.*?\})\s*```',
+                r'```\s*(\{.*?\})\s*```',
+                # Look for JSON blocks
+                r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}',
+                # Look for the response format section
+                r'RESPONSE FORMAT:.*?(\{.*?\})',
+            ]
+            
+            import re
+            
+            for pattern in json_patterns:
+                matches = re.findall(pattern, response, re.DOTALL | re.IGNORECASE)
+                for match in matches:
+                    try:
+                        # Clean the match
+                        json_text = match.strip()
+                        if json_text.startswith('{') and json_text.endswith('}'):
+                            parsed = json.loads(json_text)
+                            if isinstance(parsed, dict) and len(parsed) > 3:  # Should have multiple fields
+                                logger.info("Successfully extracted JSON from response")
+                                return parsed
+                    except json.JSONDecodeError:
+                        continue
+            
+            # Try to extract key-value pairs manually
+            return self._extract_key_value_pairs(response)
+            
+        except Exception as e:
+            logger.warning(f"Failed to extract JSON from response: {e}")
+            return None
+    
+    def _extract_key_value_pairs(self, response: str) -> Optional[Dict[str, Any]]:
+        """Extract key-value pairs from unstructured response text"""
+        try:
+            import re
+            
+            # Common patterns for key-value extraction
+            patterns = {
+                'valid_sources': r'valid_sources["\']?\s*:\s*["\']?([^"\n,}]+)',
+                'verdict': r'verdict["\']?\s*:\s*["\']?([^"\n}]+)',
+                'status': r'status["\']?\s*:\s*["\']?(TRUE|FALSE|FACTUAL_ERROR|DECEPTIVE_LIE|MANIPULATIVE|PARTIALLY_TRUE|OUT_OF_CONTEXT|UNVERIFIABLE)',
+                'correction': r'correction["\']?\s*:\s*["\']?([^"\n}]+)',
+                'country': r'country["\']?\s*:\s*["\']?([a-z]{2})',
+                'category': r'category["\']?\s*:\s*["\']?(politics|economy|environment|military|healthcare|education|technology|social|international|legal|history|other)',
+                'research_metadata': r'research_metadata["\']?\s*:\s*["\']?([^"\n}]+)',
+            }
+            
+            extracted = {}
+            
+            for key, pattern in patterns.items():
+                matches = re.findall(pattern, response, re.IGNORECASE | re.MULTILINE)
+                if matches:
+                    extracted[key] = matches[0].strip().strip('"\'')
+            
+            if len(extracted) >= 3:  # At least some basic fields
+                logger.info(f"Extracted {len(extracted)} key-value pairs from response")
+                return extracted
+            
+            return None
+            
+        except Exception as e:
+            logger.warning(f"Failed to extract key-value pairs: {e}")
+            return None
+    
+    def _create_fallback_response(self, response: str, request: Optional[LLMResearchRequest]) -> LLMResearchResponse:
+        """Create fallback response when JSON parsing fails"""
+        
+        # Try to extract basic information from text
+        import re
+        
+        # Look for status keywords
+        status = "UNVERIFIABLE"
+        if re.search(r'\b(true|accurate|correct)\b', response, re.IGNORECASE):
+            status = "TRUE"
+        elif re.search(r'\b(false|incorrect|wrong|misleading)\b', response, re.IGNORECASE):
+            status = "FACTUAL_ERROR"
+        elif re.search(r'\b(manipulative|deceptive)\b', response, re.IGNORECASE):
+            status = "MANIPULATIVE"
+        elif re.search(r'\b(partially|somewhat|mixed)\b', response, re.IGNORECASE):
+            status = "PARTIALLY_TRUE"
+        
+        # Extract a verdict from the response
+        sentences = response.split('.')
+        verdict = "Analysis completed with limited structured data."
+        
+        for sentence in sentences:
+            if len(sentence.strip()) > 50 and any(word in sentence.lower() for word in ['statement', 'claim', 'evidence', 'analysis']):
+                verdict = sentence.strip()[:200] + "..." if len(sentence) > 200 else sentence.strip()
+                break
+        
+        return LLMResearchResponse(
+            valid_sources="Unknown (parsed from text)",
+            verdict=verdict,
+            status=status,
+            correction=None,
+            country=getattr(request, 'country', None) if request else None,
+            category=getattr(request, 'category', None) if request else None,
+            research_method="text_parsing_fallback",
+            profile_id=getattr(request, 'profile_id', None) if request else None,
+            expert_perspectives=[],
+            key_findings=[],
+            research_summary=response[:300] + "..." if len(response) > 300 else response,
+            confidence_score=40,  # Lower confidence for fallback parsing
+            research_metadata=None,
+            additional_context="Response parsed using fallback text analysis"
+        )
+    
+    def _create_error_response_from_text(self, response: str, error_message: str, request: Optional[LLMResearchRequest]) -> LLMResearchResponse:
+        """Create error response when parsing completely fails"""
+        return LLMResearchResponse(
+            valid_sources="0 (parsing error)",
+            verdict=f"Failed to parse LLM response: {error_message}",
+            status="UNVERIFIABLE",
+            correction=None,
+            country=getattr(request, 'country', None) if request else None,
+            category=getattr(request, 'category', None) if request else None,
+            research_method="error_recovery",
+            profile_id=getattr(request, 'profile_id', None) if request else None,
+            expert_perspectives=[],
+            key_findings=[],
+            research_summary="",
+            confidence_score=20,
+            research_metadata=None,
+            additional_context=f"Parse error: {error_message}. Response length: {len(response)} chars"
+        )
     
     def create_response_object(self, parsed_response: Dict[str, Any], request: LLMResearchRequest) -> LLMResearchResponse:
         """
@@ -57,6 +234,13 @@ class ResponseParser:
                     logger.warning(f"Invalid category '{category}', using OTHER")
                     category = StatementCategory.OTHER
             
+            # Parse research metadata
+            research_metadata_raw = parsed_response.get("research_metadata")
+            research_metadata = None
+            if research_metadata_raw and isinstance(research_metadata_raw, str):
+                # For string metadata, just store as additional context
+                research_metadata = research_metadata_raw
+            
             response = LLMResearchResponse(
                 valid_sources=valid_sources,
                 verdict=verdict,
@@ -71,7 +255,9 @@ class ResponseParser:
                 research_method="LLM Research",
                 profile_id=request.profile_id,
                 research_summary=verdict,
-                confidence_score=self._calculate_confidence_score(parsed_response, expert_perspectives)
+                confidence_score=self._calculate_confidence_score(parsed_response, expert_perspectives),
+                research_metadata=None,  # Will be set by calling service
+                additional_context=research_metadata_raw if isinstance(research_metadata_raw, str) else ""
             )
             
             logger.info(f"Created response object with {len(expert_perspectives)} expert perspectives")
@@ -84,7 +270,6 @@ class ResponseParser:
             
         except Exception as e:
             logger.error(f"Failed to create response object: {e}")
-            import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
             logger.error(f"Parsed response keys: {list(parsed_response.keys())}")
             
@@ -161,7 +346,6 @@ class ResponseParser:
             
         except Exception as e:
             logger.error(f"Failed to parse resource analysis: {e}")
-            import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
             return None
     
@@ -220,7 +404,7 @@ class ResponseParser:
                 source_type = perspective_data.get("source_type", "llm")
                 expertise_area = perspective_data.get("expertise_area", "General Analysis")
                 publication_date = perspective_data.get("publication_date")
-                
+
                 perspective = ExpertPerspective(
                     expert_name=expert_name,
                     stance=stance,
@@ -233,11 +417,11 @@ class ResponseParser:
                 )
                 
                 perspectives.append(perspective)
-                logger.debug(f"Parsed expert perspective: {expert_name} ({stance})")
+                logger.debug(f"Successfully parsed expert perspective: {expert_name} ({stance})")
                 
             except Exception as e:
-                logger.warning(f"Failed to parse expert perspective at index {i}: {e}")
-                logger.warning(f"Perspective data: {perspective_data}")
+                logger.warning(f"Failed to parse expert perspective {i}: {e}")
+                logger.debug(f"Perspective data: {perspective_data}")
                 continue
         
         logger.info(f"Successfully parsed {len(perspectives)} expert perspectives")
@@ -269,7 +453,7 @@ class ResponseParser:
         status = parsed_response.get("status", "UNVERIFIABLE")
         if status in ["TRUE", "FALSE"]:
             base_confidence += 20
-        elif status in ["PARTIALLY_TRUE", "MISLEADING"]:
+        elif status in ["PARTIALLY_TRUE", "MANIPULATIVE"]:
             base_confidence += 10
         
         # Boost based on number of expert perspectives
@@ -304,5 +488,4 @@ class ResponseParser:
             confidence_score=20
         )
 
-# Create parser instance
 response_parser = ResponseParser()

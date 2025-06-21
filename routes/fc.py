@@ -70,14 +70,8 @@ async def research_statement(request: ResearchRequestAPI) -> EnhancedLLMResearch
         logger.info(f"Research will include: LLM data + Web search + Resource analysis")
         
         result = await fact_checking_core_service.process_research_request(request)
-        
-        # Log research completion with metadata
-        research_sources = []
-        if hasattr(result, 'research_metadata') and result.research_metadata:
-            research_sources = result.research_metadata.research_sources
-        
+    
         logger.info(f"Tri-factor research completed successfully")
-        logger.info(f"Research sources used: {', '.join(research_sources) if research_sources else 'LLM only'}")
         logger.info(f"Final confidence score: {getattr(result, 'confidence_score', 'N/A')}")
         
         return result

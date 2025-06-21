@@ -1,13 +1,69 @@
 factcheck_prompt = """
-FACT-CHECKING CRITERIA:
-- TRUE: Statement is accurate and aligns with the consensus of reliable, authoritative sources.
-- FALSE: Statement is demonstrably incorrect or contradicted by verifiable evidence.
-- MISLEADING: Statement uses factual elements to create a false narrative or impression by omitting critical context or manipulating data.
-- PARTIALLY_TRUE: Statement is a mix of correct and incorrect claims, or is broadly true but requires significant clarification.
-- UNVERIFIABLE: Insufficient reliable, independent information is available to make a determination.
+CRITICAL INSTRUCTION: You are analyzing the statement for truthfulness, manipulation, deception, and potential societal harm. This is serious fact-checking work to protect democratic discourse.
+
+ENHANCED FACT-CHECKING CRITERIA:
+
+STATUS DEFINITIONS (Choose the most precise assessment):
+- TRUE: Statement is factually accurate, contextually appropriate, and not misleading
+- FACTUAL_ERROR: Statement contains demonstrable factual inaccuracies or incorrect data
+- DECEPTIVE_LIE: Statement is intentionally false or misleading with malicious intent to deceive
+- MANIPULATIVE: Statement uses true facts to create false narratives or impressions through selective omission, misrepresentation, or emotional manipulation
+- PARTIALLY_TRUE: Statement contains both accurate and inaccurate elements requiring significant clarification
+- OUT_OF_CONTEXT: Statement may be factually correct but presented without crucial context that changes meaning
+- UNVERIFIABLE: Insufficient reliable information exists to make a determination
+
+SPEAKER IDENTIFICATION & CATEGORIZATION:
+MANDATORY: You MUST identify the speaker's country and category based on the source information provided.
+
+COUNTRY IDENTIFICATION:
+Analyze the speaker/source to determine their primary country using ISO codes:
+- "us" for United States speakers/sources
+- "gb" for United Kingdom speakers/sources  
+- "de" for Germany, "fr" for France, "ca" for Canada, etc.
+- Use context clues: office held, location mentioned, news source origin
+- If speaker represents international organization, use their base country
+- Default to "unknown" only if absolutely no geographic indicators exist
+
+CATEGORY IDENTIFICATION:
+Determine the PRIMARY subject matter category:
+- politics: Government, elections, policy, political parties, governance
+- economy: Economic data, markets, trade, fiscal policy, business
+- environment: Climate, sustainability, environmental policy
+- military: Defense, security, armed forces, warfare
+- healthcare: Medical claims, health policy, disease, treatments
+- education: Educational policy, schools, academic research
+- technology: Tech innovation, digital policy, AI, cybersecurity  
+- social: Demographics, social issues, cultural topics, civil rights
+- international: Foreign relations, global affairs, treaties
+- legal: Legal decisions, law enforcement, judicial matters
+- history: Historical claims, past events, interpretations
+- other: Only if statement doesn't fit any specific category
+
+ENHANCED RESOURCE ANALYSIS:
+CRITICAL: Properly categorize sources based on their RELATIONSHIP to the statement:
+
+resources_agreed: Sources that SUPPORT, CONFIRM, or VALIDATE the statement
+- Include sources that provide evidence FOR the statement's accuracy
+- Include sources that corroborate the claims made
+- Include data that backs up the speaker's assertions
+
+resources_disagreed: Sources that CONTRADICT, REFUTE, or OPPOSE the statement  
+- Include sources that provide evidence AGAINST the statement
+- Include data that contradicts the speaker's claims
+- Include expert opinions that dispute the assertions
+
+RESEARCH METADATA INSTRUCTIONS:
+You MUST provide a research_metadata summary that includes:
+1. "statement_analysis": Brief analysis of the statement's factual basis
+2. "potential_harm_assessment": If statement is false/deceptive/manipulative, explain the potential negative societal impact
+3. "misinformation_risk": Assess risk level (low/medium/high) if statement spreads unchecked
+4. "correction_urgency": How urgently does this need public correction (low/medium/high/critical)
+
+Example research_metadata:
+"This economic claim lacks supporting data and could mislead voters about financial policy effectiveness. Risk: Medium - could influence voting decisions based on false economic premises. Correction urgency: High - statement being widely circulated during election period."
 
 VERDICT & CORRECTION GUIDELINES:
-- verdict: A single, powerful sentence that identifies the core truth or falsehood with specific evidence. Must include: (1) the rating rationale, (2) the key evidence or missing context, and (3) why this matters. Example: "The statement is misleading because while it correctly cites a 15% GDP growth, it fails to mention this followed a 20% contraction the previous year, creating a net decline."
+- verdict: A single, powerful sentence that identifies the core truth or falsehood with specific evidence. Must include: (1) the rating rationale, (2) the key evidence or missing context, and (3) why this matters. Example: "The statement is manipulative because while it correctly cites a 15% GDP growth, it fails to mention this followed a 20% contraction the previous year, creating a net decline."
 - correction: Provide a precise, fact-based correction that directly addresses the flaw. Include specific numbers, dates, and authoritative sources. Must be actionable and quotable. Example: "According to IMF data, the economy experienced a net 5% contraction over the two-year period (2023-2024), not the implied growth."
 
 EXPERT PERSPECTIVES ANALYSIS:
@@ -85,40 +141,27 @@ When evaluating sources, consider:
 6. Track record (historical accuracy of source)
 
 SOURCE CATEGORIZATION:
-- MAINSTREAM: Major news outlets, established media organizations (CNN, BBC, Reuters, Associated Press, major newspapers)
-- GOVERNANCE: Government websites, official agencies, regulatory bodies, policy institutes (.gov, .mil, official statistics)
-- ACADEMIC: Universities, peer-reviewed journals, research institutions, scientific organizations (.edu, .org academic)
-- MEDICAL: Medical institutions, health organizations, medical journals (WHO, CDC, medical associations)
-- LEGAL: Court records, law reviews, bar associations, legal databases
-- ECONOMIC: Central banks, economic research institutes, financial regulatory bodies
-- OTHER: Independent media, blogs, think tanks, advocacy groups, commercial sources
+- mainstream: Major news outlets, established media organizations (CNN, BBC, Reuters, Associated Press, major newspapers)
+- governance: Government websites, official agencies, regulatory bodies, policy institutes (.gov, .mil, official statistics)
+- academic: Universities, peer-reviewed journals, research institutions, scientific organizations (.edu, .org academic)
+- medical: Medical institutions, health organizations, medical journals (WHO, CDC, medical associations)
+- legal: Court records, law reviews, bar associations, legal databases
+- economic: Central banks, economic research institutes, financial regulatory bodies
+- other: Independent media, blogs, think tanks, advocacy groups, commercial sources
 
-COUNTRY IDENTIFICATION:
-Identify the primary country/region of each source using ISO country codes (us, gb, de, fr, ca, au, etc.)
-
-STATEMENT CATEGORIES:
-- politics: Political statements, governance, elections, policy announcements
-- economy: Economic data, financial claims, market statements, trade information
-- environment: Climate change, environmental policies, sustainability claims
-- military: Defense spending, military capabilities, security matters
-- healthcare: Medical claims, health policy, pandemic information
-- education: Educational statistics, policy, institutional claims
-- technology: Tech innovations, digital policy, cybersecurity
-- social: Social issues, demographics, cultural statements
-- international: Foreign relations, international agreements, global affairs
-- legal: Legal claims, judicial decisions, regulatory matters
-- history: Historical claims, interpretations of past events
-- other: Statements that don't fit the above categories
+COUNTRY IDENTIFICATION FOR SOURCES:
+Identify the primary country/region of each source using ISO codes (us, gb, de, fr, ca, au, etc.)
 
 RESPONSE FORMAT:
 Return a JSON object with this exact structure:
 {
     "valid_sources": "number (percentage agreement across X unique sources)",
     "verdict": "One comprehensive sentence explaining the fact-check conclusion with specific evidence",
-    "status": "TRUE/FALSE/MISLEADING/PARTIALLY_TRUE/UNVERIFIABLE",
+    "status": "TRUE/FACTUAL_ERROR/DECEPTIVE_LIE/MANIPULATIVE/PARTIALLY_TRUE/OUT_OF_CONTEXT/UNVERIFIABLE",
     "correction": "If false/misleading, provide precise correction with source citation, otherwise null",
-    "country": "ISO country code of statement origin/speaker (e.g., 'us', 'gb', 'de')",
-    "category": "politics/economy/environment/military/healthcare/education/technology/social/international/legal/history/other",
+    "country": "MANDATORY: ISO country code of statement origin/speaker (e.g., 'us', 'gb', 'de')",
+    "category": "MANDATORY: politics/economy/environment/military/healthcare/education/technology/social/international/legal/history/other",
+    "research_metadata": "MANDATORY: Brief analysis including potential harm assessment, misinformation risk level, and correction urgency if statement is problematic",
     "resources_agreed": {
         "total": "percentage (e.g., 85%)",
         "count": 0,
@@ -138,7 +181,7 @@ Return a JSON object with this exact structure:
                 "country": "country_code",
                 "credibility": "high/medium/low",
                 "publication_date": "YYYY-MM-DD",
-                "key_finding": "Specific data point or conclusion that supports the statement"
+                "key_finding": "Specific data point or conclusion that SUPPORTS the statement"
             }
         ]
     },
@@ -161,7 +204,7 @@ Return a JSON object with this exact structure:
                 "country": "country_code",
                 "credibility": "high/medium/low",
                 "publication_date": "YYYY-MM-DD",
-                "key_finding": "Specific data point or conclusion that contradicts the statement"
+                "key_finding": "Specific data point or conclusion that CONTRADICTS the statement"
             }
         ]
     },
@@ -225,6 +268,16 @@ Return a JSON object with this exact structure:
     }
 }
 
+MANDATORY VALIDATION CHECKLIST:
+Before finalizing response, ensure:
+1. ✓ country field is populated with correct ISO code (not "unknown" unless absolutely impossible)
+2. ✓ category field is populated with most appropriate category
+3. ✓ research_metadata includes harm assessment if statement is problematic
+4. ✓ resources_agreed contains sources that SUPPORT the statement
+5. ✓ resources_disagreed contains sources that CONTRADICT the statement
+6. ✓ All expert confidence levels are appropriate (0 for UNVERIFIABLE)
+7. ✓ Status uses the enhanced categories (DECEPTIVE_LIE, MANIPULATIVE, etc.)
+
 QUALITY ASSURANCE CHECKLIST:
 Before finalizing the response, verify:
 1. Does the verdict clearly state WHY the statement is true/false/misleading with specific evidence?
@@ -235,23 +288,152 @@ Before finalizing the response, verify:
 6. Are expert opinions written as direct quotes without mentioning expert titles?
 7. Do UNVERIFIABLE experts explain what specific information would be needed for analysis?
 8. Is the selected domain specialist truly the most relevant for this statement?
-
-EXPERT PERSPECTIVE EXAMPLES:
-
-STRONG EXAMPLES (when sufficient information exists):
-- Strong Critical Analyst: "The statement commits a base rate fallacy by highlighting a 50% increase without noting the original figure was only 2 cases, making the change statistically insignificant. Additionally, it uses emotional language ('crisis', 'epidemic') that isn't supported by WHO's technical definitions, which require sustained community transmission above specific thresholds. The logical structure fails because it conflates correlation with causation without controlling for seasonal factors."
-
-- Strong Quantitative Analyst: "The cited 8% unemployment figure is technically accurate but misleading when not adjusted for seasonal variations and workforce participation changes. When using U-6 methodology (including discouraged workers), the rate is actually 12.3%. Furthermore, youth unemployment (18-24) stands at 18.5%, nearly hidden by the aggregate figure, and the month-over-month trend shows acceleration rather than the implied stability."
-
-UNVERIFIABLE EXAMPLES (when insufficient information exists):
-- Unverifiable Critical Analyst: "The statement lacks sufficient context and specificity to evaluate its logical structure or evidence base. Without access to the referenced bill's actual text, voting records, or official budget analyses, it's impossible to assess whether the claimed savings are realistic or how they're calculated. The term 'One Big Beautiful Bill' appears to be colloquial rather than an official legislative title, making verification of specific provisions impossible. A proper analysis would require the bill number, official title, CBO scoring, and detailed provision breakdown."
-
-- Unverifiable Quantitative Analyst: "No verifiable numerical data supports the $1.7 trillion savings claim, and the lack of specific bill identification prevents access to official budget estimates or scoring. Without Congressional Budget Office analysis, Government Accountability Office reports, or other authoritative fiscal projections, quantitative verification is impossible. The analysis would require baseline spending projections, implementation timelines, and detailed methodology for calculating 'mandatory savings.' Current information is insufficient to perform meaningful numerical validation."
-
-EXPERT OPINION QUOTE EXAMPLES:
-- Good: "The logical framework shows significant gaps in evidence validation and relies heavily on unsubstantiated assumptions about economic causation."
-- Bad: "The Critical Analyst points out that the logical framework shows gaps..."
-
-- Good: "Without baseline expenditure data and implementation timelines, these savings projections cannot be meaningfully evaluated or verified."
-- Bad: "The Quantitative Analyst notes that without baseline data, the projections cannot be verified."
 """
+
+
+class PromptManager:
+    """Manager for handling fact-checking prompts and prompt generation"""
+    
+    def __init__(self):
+        self.base_prompt = factcheck_prompt
+    
+    def get_enhanced_factcheck_prompt(
+        self, 
+        statement: str, 
+        source: str = "", 
+        context: str = "", 
+        country: str = None, 
+        category: str = None,
+        web_context: str = None
+    ) -> str:
+        """
+        Generate enhanced fact-check prompt with statement details
+        
+        Args:
+            statement: The statement to fact-check
+            source: Source of the statement
+            context: Additional context about the statement
+            country: Country code for the statement origin
+            category: Category of the statement
+            web_context: Optional web research context
+            
+        Returns:
+            Complete fact-checking prompt
+        """
+        
+        # Build the statement analysis section
+        statement_section = f"""
+FACT-CHECK REQUEST:
+Statement: "{statement}"
+Source: {source if source else "Not specified"}
+Context: {context if context else "No additional context provided"}
+"""
+        
+        if country:
+            statement_section += f"Suggested Country: {country}\n"
+        if category:
+            statement_section += f"Suggested Category: {category}\n"
+        
+        # Add web context if available
+        web_section = ""
+        if web_context:
+            web_section = f"""
+
+WEB RESEARCH CONTEXT:
+{web_context}
+
+INSTRUCTIONS: Use the web research context above to enhance your fact-checking analysis. 
+Incorporate relevant information from web sources in your response, especially for resources_agreed and resources_disagreed sections.
+"""
+        
+        # Combine all sections
+        complete_prompt = f"""You are a professional fact-checker analyzing the following statement.
+
+{statement_section}
+{web_section}
+
+{self.base_prompt}
+"""
+        
+        return complete_prompt
+    
+    def get_standard_prompt(self, statement: str, source: str = "", context: str = "") -> str:
+        """
+        Generate standard fact-check prompt (simpler version)
+        
+        Args:
+            statement: The statement to fact-check
+            source: Source of the statement  
+            context: Additional context
+            
+        Returns:
+            Standard fact-checking prompt
+        """
+        return f"""You are a professional fact-checker. Please analyze the following statement:
+
+Statement: "{statement}"
+Source: {source if source else "Not specified"}
+Context: {context if context else "No additional context"}
+
+{self.base_prompt}
+"""
+    
+    def get_web_enhanced_prompt(
+        self, 
+        statement: str, 
+        source: str, 
+        context: str,
+        web_sources: list,
+        web_findings: str
+    ) -> str:
+        """
+        Generate web-enhanced prompt with grounding sources
+        
+        Args:
+            statement: The statement to fact-check
+            source: Source of the statement
+            context: Additional context
+            web_sources: List of web sources found
+            web_findings: Key findings from web research
+            
+        Returns:
+            Web-enhanced fact-checking prompt
+        """
+        
+        # Format web sources
+        sources_section = ""
+        if web_sources:
+            sources_section = "\n=== WEB SOURCES DISCOVERED ===\n"
+            for i, source_info in enumerate(web_sources, 1):
+                if isinstance(source_info, dict):
+                    sources_section += f"{i}. {source_info.get('title', 'Unknown Title')}\n"
+                    sources_section += f"   URL: {source_info.get('url', 'No URL')}\n"
+                    sources_section += f"   Domain: {source_info.get('domain', 'Unknown')}\n\n"
+                else:
+                    sources_section += f"{i}. {str(source_info)}\n\n"
+        
+        # Format findings
+        findings_section = ""
+        if web_findings:
+            findings_section = f"\n=== KEY FINDINGS FROM WEB RESEARCH ===\n{web_findings}\n"
+        
+        return f"""You are a professional fact-checker with access to current web research.
+
+FACT-CHECK REQUEST:
+Statement: "{statement}"
+Source: {source}
+Context: {context}
+
+{sources_section}
+{findings_section}
+
+INSTRUCTIONS: 
+1. Use the web sources and findings above to enhance your fact-checking analysis
+2. Include relevant web sources in your resources_agreed or resources_disagreed sections
+3. Reference specific findings in your verdict and expert perspectives
+
+{self.base_prompt}
+"""
+
+
+prompt_manager = PromptManager()

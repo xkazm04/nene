@@ -29,7 +29,7 @@ class EnhancedLLMResearchResponse(BaseModel):
     # Core LLM response fields
     valid_sources: str
     verdict: str
-    status: Literal["TRUE", "FALSE", "MISLEADING", "PARTIALLY_TRUE", "UNVERIFIABLE"]
+    status: Literal["TRUE", "FACTUAL_ERROR", "DECEPTIVE_LIE", "MANIPULATIVE", "PARTIALLY_TRUE", "OUT_OF_CONTEXT", "UNVERIFIABLE"]
     correction: Optional[str] = None
     country: Optional[str] = None
     category: Optional[str] = None
@@ -44,7 +44,7 @@ class EnhancedLLMResearchResponse(BaseModel):
     key_findings: List[str] = []
     research_summary: str = ""
     confidence_score: int = 50
-    research_metadata: Optional[Union[Dict[str, Any], ResearchMetadata]] = None
+    research_metadata: Optional[Union[Dict[str, Any], ResearchMetadata, str]] = None  # Allow string for simple metadata
     llm_findings: List[str] = []
     web_findings: List[str] = []
     resource_findings: List[str] = []
@@ -59,8 +59,8 @@ class EnhancedLLMResearchResponse(BaseModel):
     processed_at: Union[str, datetime]
     
     # Database and processing metadata
-    database_id: Optional[str] = None  # ADDED: Missing field
-    is_duplicate: bool = False  # ADDED: Missing field
+    database_id: Optional[str] = None
+    is_duplicate: bool = False
     
     # Error handling metadata
     research_errors: List[str] = []
@@ -77,10 +77,21 @@ class EnhancedLLMResearchResponse(BaseModel):
             return v.isoformat()
         return v
     
-    @validator('resources_agreed', 'resources_disagreed', 'experts', 'research_metadata', pre=True)
+    @validator('resources_agreed', 'resources_disagreed', 'experts', pre=True)
     def convert_models_to_dict(cls, v):
         """Convert Pydantic models to dictionaries for JSON serialization"""
         if hasattr(v, 'model_dump'):
+            return v.model_dump()
+        elif hasattr(v, 'dict'):
+            return v.dict()
+        return v
+    
+    @validator('research_metadata', pre=True)
+    def convert_research_metadata(cls, v):
+        """Convert ResearchMetadata to dict or keep as string"""
+        if isinstance(v, str):
+            return v  # Keep string as-is
+        elif hasattr(v, 'model_dump'):
             return v.model_dump()
         elif hasattr(v, 'dict'):
             return v.dict()
