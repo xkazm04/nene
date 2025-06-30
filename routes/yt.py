@@ -176,75 +176,75 @@ class VideoProcessingResponse(BaseModel):
     stream_url: str
     message: str
 
-def get_base_url() -> str:
-    """Get the base URL for the API."""
-    # Try to get from environment variable first
-    base_url = os.getenv("API_BASE_URL")
-    if base_url:
-        return base_url.rstrip('/')
+# def get_base_url() -> str:
+#     """Get the base URL for the API."""
+#     # Try to get from environment variable first
+#     base_url = os.getenv("API_BASE_URL")
+#     if base_url:
+#         return base_url.rstrip('/')
     
-    # Fallback to default for development
-    return "http://localhost:8000"
+#     # Fallback to default for development
+#     return "http://localhost:8080"
 
-@router.post("/process-video", response_model=VideoProcessingResponse)
-async def start_video_processing(request: VideoProcessingRequest) -> VideoProcessingResponse:
-    """
-    Start complete video processing pipeline with real-time SSE updates.
+# @router.post("/process-video", response_model=VideoProcessingResponse)
+# async def start_video_processing(request: VideoProcessingRequest) -> VideoProcessingResponse:
+#     """
+#     Start complete video processing pipeline with real-time SSE updates.
     
-    Args:
-        request: Video processing request with URL and options
+#     Args:
+#         request: Video processing request with URL and options
         
-    Returns:
-        VideoProcessingResponse: Job ID and stream URL for real-time updates
-    """
-    try:
-        logger.info("=" * 60)
-        logger.info(f"🚀 STARTING VIDEO PROCESSING REQUEST")
-        logger.info(f"   URL: {request.url}")
-        logger.info(f"   Speaker: {request.speaker_name}")
-        logger.info(f"   Context: {request.context}")
-        logger.info(f"   Language: {request.language_code}")
-        logger.info(f"   Model: {request.model_id}")
-        logger.info(f"   Cleanup: {request.cleanup_audio}")
-        logger.info(f"   Research: {request.research_statements}")
-        logger.info("=" * 60)
+#     Returns:
+#         VideoProcessingResponse: Job ID and stream URL for real-time updates
+#     """
+#     try:
+#         logger.info("=" * 60)
+#         logger.info(f"🚀 STARTING VIDEO PROCESSING REQUEST")
+#         logger.info(f"   URL: {request.url}")
+#         logger.info(f"   Speaker: {request.speaker_name}")
+#         logger.info(f"   Context: {request.context}")
+#         logger.info(f"   Language: {request.language_code}")
+#         logger.info(f"   Model: {request.model_id}")
+#         logger.info(f"   Cleanup: {request.cleanup_audio}")
+#         logger.info(f"   Research: {request.research_statements}")
+#         logger.info("=" * 60)
         
-        # Create processing job
-        job_id = sse_service.create_job(str(request.url))
-        logger.info(f"📋 Created processing job: {job_id}")
+#         # Create processing job
+#         job_id = sse_service.create_job(str(request.url))
+#         logger.info(f"📋 Created processing job: {job_id}")
         
-        # Start background processing
-        task = asyncio.create_task(
-            process_video_pipeline(
-                job_id=job_id,
-                video_url=str(request.url),
-                speaker_name=request.speaker_name,
-                context=request.context,
-                language_code=request.language_code,
-                model_id=request.model_id,
-                cleanup_audio=request.cleanup_audio,
-                research_statements=request.research_statements
-            )
-        )
+#         # Start background processing
+#         task = asyncio.create_task(
+#             process_video_pipeline(
+#                 job_id=job_id,
+#                 video_url=str(request.url),
+#                 speaker_name=request.speaker_name,
+#                 context=request.context,
+#                 language_code=request.language_code,
+#                 model_id=request.model_id,
+#                 cleanup_audio=request.cleanup_audio,
+#                 research_statements=request.research_statements
+#             )
+#         )
         
-        logger.info(f"🔄 Background processing task started for job {job_id}")
+#         logger.info(f"🔄 Background processing task started for job {job_id}")
         
-        # Construct full stream URL
-        base_url = get_base_url()
-        stream_url = f"{base_url}/yt/stream/{job_id}"
-        logger.info(f"📡 Stream URL: {stream_url}")
+#         # Construct full stream URL
+#         base_url = get_base_url()
+#         stream_url = f"{base_url}/yt/stream/{job_id}"
+#         logger.info(f"📡 Stream URL: {stream_url}")
         
-        return VideoProcessingResponse(
-            job_id=job_id,
-            stream_url=stream_url,
-            message="Video processing started. Connect to stream_url for real-time updates."
-        )
+#         return VideoProcessingResponse(
+#             job_id=job_id,
+#             stream_url=stream_url,
+#             message="Video processing started. Connect to stream_url for real-time updates."
+#         )
         
-    except Exception as e:
-        error_msg = f"Failed to start video processing: {str(e)}"
-        logger.error(f"❌ {error_msg}")
-        logger.error(f"🔍 Error type: {type(e).__name__}")
-        raise HTTPException(status_code=400, detail=error_msg)
+#     except Exception as e:
+#         error_msg = f"Failed to start video processing: {str(e)}"
+#         logger.error(f"❌ {error_msg}")
+#         logger.error(f"🔍 Error type: {type(e).__name__}")
+#         raise HTTPException(status_code=400, detail=error_msg)
 
 @router.get("/stream/{job_id}")
 async def stream_processing_updates(job_id: str):
