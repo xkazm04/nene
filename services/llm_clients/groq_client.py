@@ -62,7 +62,7 @@ class GroqLLMClient:
                 ],
                 model="meta-llama/llama-4-scout-17b-16e-instruct",
                 temperature=0.1,
-                max_tokens=14000,
+                max_tokens=8000,
                 top_p=0.9,
                 stream=False
             )
